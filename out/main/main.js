@@ -36,14 +36,22 @@ function basicExtractPlainText(rtf) {
 function startStickiesWatcher(opts) {
   const { stickiesDir } = opts;
   console.log("[watcher] Starting watcher for:", stickiesDir);
-  const watcher = chokidar.watch(path.join(stickiesDir, "*.rtfd/TXT.rtf"), {
-    ignoreInitial: true
+  const globPattern = path.join(stickiesDir, "**/TXT.rtf");
+  const watcher = chokidar.watch(globPattern, {
+    // watch for new files, changes, deletions
+    ignoreInitial: true,
+    depth: 2,
+    // only the package dir and its immediate children
+    usePolling: true,
+    interval: 500
   });
-  console.log("[watcher] Chokidar watching pattern:", path.join(stickiesDir, "*.rtfd/TXT.rtf"));
-  watcher.on("change", (filePath) => {
-    console.log("[watcher] change event", filePath);
-    if (debounceTimers[filePath]) clearTimeout(debounceTimers[filePath]);
-    debounceTimers[filePath] = setTimeout(() => handleChange(filePath), 200);
+  console.log("[watcher] Chokidar watching pattern:", globPattern);
+  watcher.on("all", (ev, p) => {
+    console.log("[watcher] fs event", ev, p);
+    if (ev === "change" || ev === "add") {
+      if (debounceTimers[p]) clearTimeout(debounceTimers[p]);
+      debounceTimers[p] = setTimeout(() => handleChange(p), 200);
+    }
   });
   return watcher;
 }
@@ -131,7 +139,10 @@ const createFloatingWindow = () => {
 };
 electron.app.whenReady().then(() => {
   createFloatingWindow();
-  const stickiesDir = process.env.STICKIES_DIR || path.join(process.cwd(), "test-stickies");
+  const prodFlag = process.argv.includes("--prod");
+  const defaultTestDir = path.join(process.cwd(), "test-stickies");
+  const macStickiesDir = path.join(process.env.HOME || "", "Library/Containers/com.apple.Stickies/Data/Library/Stickies");
+  const stickiesDir = process.env.STICKIES_DIR || (prodFlag ? macStickiesDir : defaultTestDir);
   console.log("[main] Starting watcher on Stickies dir:", stickiesDir);
   console.log("[main] Directory exists:", fs.existsSync(stickiesDir));
   startStickiesWatcher({ stickiesDir });

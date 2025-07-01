@@ -95,8 +95,11 @@ const createFloatingWindow = (): void => {
 app.whenReady().then(() => {
   createFloatingWindow();
 
-  // Start Stickies watcher in background
-  const stickiesDir = process.env.STICKIES_DIR || join(process.cwd(), 'test-stickies');
+  // Determine Stickies directory
+  const prodFlag = process.argv.includes('--prod');
+  const defaultTestDir = join(process.cwd(), 'test-stickies');
+  const macStickiesDir = join(process.env.HOME || '', 'Library/Containers/com.apple.Stickies/Data/Library/Stickies');
+  const stickiesDir = process.env.STICKIES_DIR || (prodFlag ? macStickiesDir : defaultTestDir);
   console.log('[main] Starting watcher on Stickies dir:', stickiesDir);
   console.log('[main] Directory exists:', fs.existsSync(stickiesDir));
   startStickiesWatcher({ stickiesDir });

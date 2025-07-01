@@ -39,16 +39,23 @@ function basicExtractPlainText(rtf: string): string {
 export function startStickiesWatcher(opts: WatcherOptions) {
   const { stickiesDir } = opts;
   console.log('[watcher] Starting watcher for:', stickiesDir);
-  const watcher = chokidar.watch(path.join(stickiesDir, '*.rtfd/TXT.rtf'), {
+  // Some sticky note packages are named *.rtfd or *.rtfd.sb-<hash>; watch any immediate subdir then TXT.rtf file.
+  const globPattern = path.join(stickiesDir, '**/TXT.rtf');
+  const watcher = chokidar.watch(globPattern, {
+    // watch for new files, changes, deletions
     ignoreInitial: true,
+    depth: 2, // only the package dir and its immediate children
+    usePolling: true,
+    interval: 500,
   });
-  console.log('[watcher] Chokidar watching pattern:', path.join(stickiesDir, '*.rtfd/TXT.rtf'));
+  console.log('[watcher] Chokidar watching pattern:', globPattern);
 
-  watcher.on('change', (filePath) => {
-    console.log('[watcher] change event', filePath);
-    // Debounce per file 200ms
-    if (debounceTimers[filePath]) clearTimeout(debounceTimers[filePath]);
-    debounceTimers[filePath] = setTimeout(() => handleChange(filePath), 200);
+  watcher.on('all', (ev, p) => {
+    console.log('[watcher] fs event', ev, p);
+    if (ev === 'change' || ev === 'add') {
+      if (debounceTimers[p]) clearTimeout(debounceTimers[p]);
+      debounceTimers[p] = setTimeout(() => handleChange(p), 200);
+    }
   });
 
   return watcher;

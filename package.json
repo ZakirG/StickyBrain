@@ -9,9 +9,12 @@
   ],
   "scripts": {
     "dev": "electron-vite dev",
+    "dev:prod": "electron-vite dev -- --prod",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
+    "preview:prod": "electron-vite preview -- --prod",
     "start": "electron-forge start",
+    "start:prod": "electron-forge start -- --prod",
     "package": "electron-forge package",
     "make": "electron-forge make",
     "publish": "electron-forge publish",

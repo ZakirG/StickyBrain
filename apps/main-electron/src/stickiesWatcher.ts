@@ -28,12 +28,46 @@ const lastContent: Record<string, string> = {};
 const debounceTimers: Record<string, NodeJS.Timeout> = {};
 
 function basicExtractPlainText(rtf: string): string {
-  return rtf
-    .replace(/\\'([0-9a-fA-F]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
-    .replace(/\\par[d]?/g, '\n')
-    .replace(/\\[^\s]+ ?/g, '')
-    .replace(/[{}]/g, '')
-    .trim();
+  // Handle hex-encoded characters first
+  let text = rtf.replace(/\\'([0-9a-fA-F]{2})/g, (_, hex) => {
+    return String.fromCharCode(parseInt(hex, 16));
+  });
+  
+  // Find the actual text content after RTF headers
+  // Look for the pattern that starts actual content (after font/color tables)
+  const contentMatch = text.match(/\\f\d+\\fs\d+\s*\\cf\d+\s*(.+?)(?:\}|$)/s);
+  if (contentMatch) {
+    text = contentMatch[1];
+  } else {
+    // Fallback: try to find content after the last }
+    const parts = text.split('}');
+    if (parts.length > 1) {
+      text = parts[parts.length - 2] || parts[parts.length - 1];
+    }
+  }
+  
+  // Convert RTF line breaks to actual line breaks
+  text = text.replace(/\\\\/g, '\n'); // Double backslash = line break
+  text = text.replace(/\\par\b/g, '\n'); // Paragraph break
+  text = text.replace(/\\line\b/g, '\n'); // Line break
+  
+  // Remove remaining RTF control words
+  text = text.replace(/\\[a-zA-Z]+\d*/g, '');
+  
+  // Remove RTF control symbols
+  text = text.replace(/\\./g, '');
+  
+  // Remove any remaining braces
+  text = text.replace(/[{}]/g, '');
+  
+  // Clean up whitespace
+  text = text.replace(/\s+/g, ' ');
+  text = text.replace(/^\s+|\s+$/g, '');
+  
+  // Remove any trailing percent signs or other RTF artifacts
+  text = text.replace(/%\s*$/, '');
+  
+  return text;
 }
 
 export function startStickiesWatcher(opts: WatcherOptions) {
@@ -63,40 +97,56 @@ export function startStickiesWatcher(opts: WatcherOptions) {
 
 function handleChange(rtfFilePath: string) {
   try {
-    console.log('[watcher] handleChange reading file:', rtfFilePath);
+    console.log('👀 [WATCHER] File change detected:', rtfFilePath);
+    console.log('⏰ [WATCHER] Change timestamp:', new Date().toISOString());
+    console.log('📝 [WATCHER] Starting file change processing');
     const raw = fs.readFileSync(rtfFilePath, 'utf8');
-    const plain = basicExtractPlainText(raw);
-    console.log('[watcher] extracted plain text length:', plain.length);
+    let plain = basicExtractPlainText(raw);
+    // Remove stray backslashes inserted by macOS Stickies line-break markers
+    plain = plain.replace(/\\+/g, '');
+
+    console.log('📄 [WATCHER] Extracted plain text length:', plain.length, 'characters');
+    console.log('📄 [WATCHER] Content preview:', plain.substring(0, 100) + '...');
 
     const prev = lastContent[rtfFilePath] || '';
     lastContent[rtfFilePath] = plain;
 
     // diff: new chars = plain.slice(prev.length)
     const diff = plain.slice(prev.length);
-    console.log('[watcher] diff:', JSON.stringify(diff));
+    console.log('🔄 [WATCHER] Content diff:', JSON.stringify(diff));
+    console.log('📏 [WATCHER] Previous length:', prev.length, '| New length:', plain.length);
     if (!diff) return;
 
-    const lastChar = diff.slice(-1);
-    console.log('[watcher] lastChar test:', lastChar, 'matches:', /[.!?\n]/.test(lastChar));
+    // Determine last meaningful character ignoring whitespace
+    const lastChar = diff.trimEnd().slice(-1);
+    console.log('🔚 [WATCHER] Last character:', JSON.stringify(lastChar));
+    console.log('✅ [WATCHER] Sentence ending test:', /[.!?\n]/.test(lastChar));
     if (!/[.!?\n]/.test(lastChar)) return;
 
-    console.log('[watcher] diff triggers emit lastChar', lastChar);
+    console.log('✅ [WATCHER] Complete sentence detected! Last char:', JSON.stringify(lastChar));
 
-    console.log('[watcher] isBusy check:', isBusy);
+    console.log('🔄 [WATCHER] Checking if system is busy:', isBusy);
     if (isBusy) return;
 
+    console.log('📤 [WATCHER] Emitting input-paragraph event');
     isBusy = true;
+    const lastParagraph = getLastParagraph(plain);
+    console.log('📝 [WATCHER] Last paragraph length:', lastParagraph.length);
+    console.log('📝 [WATCHER] Last paragraph preview:', lastParagraph.substring(0, 100) + '...');
+    
     watcherEvents.emit('input-paragraph', {
-      text: getLastParagraph(plain),
+      text: lastParagraph,
       filePath: rtfFilePath,
     });
-    console.log('[watcher] emitted input-paragraph');
+    console.log('🎉 [WATCHER] Event emitted successfully!');
   } catch (err) {
-    console.error('[stickiesWatcher] Error processing change:', err);
+    console.error('❌ [WATCHER] Error processing file change:', err);
   }
 }
 
 function getLastParagraph(text: string): string {
-  const parts = text.split(/\n{2,}/).filter((p) => p.trim().length > 0);
+  // Remove stray backslashes before splitting
+  const sanitized = text.replace(/\\+/g, '').trim();
+  const parts = sanitized.split(/\n{2,}/).filter((p) => p.trim().length > 0);
   return parts[parts.length - 1] || text;
 } 

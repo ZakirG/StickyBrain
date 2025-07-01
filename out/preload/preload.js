@@ -5,5 +5,8 @@ electron.contextBridge.exposeInMainWorld("electronAPI", {
   setInactive: () => electron.ipcRenderer.send("set-inactive"),
   onUpdate: (callback) => {
     electron.ipcRenderer.on("update-ui", (_event, data) => callback(data));
+  },
+  onRagStart: (callback) => {
+    electron.ipcRenderer.on("rag-started", () => callback());
   }
 });

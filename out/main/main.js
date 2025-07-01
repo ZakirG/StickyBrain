@@ -1,10 +1,10 @@
 "use strict";
-const electron = require("electron");
-const path = require("path");
+const require$$1 = require("electron");
+const require$$0 = require("path");
 const dotenv = require("dotenv");
 const fs = require("fs");
 const chokidar = require("chokidar");
-const events = require("events");
+const require$$5 = require("events");
 const child_process = require("child_process");
 function _interopNamespaceDefault(e) {
   const n = Object.create(null, { [Symbol.toStringTag]: { value: "Module" } });
@@ -23,7 +23,7 @@ function _interopNamespaceDefault(e) {
   return Object.freeze(n);
 }
 const dotenv__namespace = /* @__PURE__ */ _interopNamespaceDefault(dotenv);
-const watcherEvents = new events.EventEmitter();
+const watcherEvents = new require$$5.EventEmitter();
 let isBusy = false;
 function setBusy(val) {
   isBusy = val;
@@ -32,12 +32,33 @@ function setBusy(val) {
 const lastContent = {};
 const debounceTimers = {};
 function basicExtractPlainText(rtf) {
-  return rtf.replace(/\\'([0-9a-fA-F]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16))).replace(/\\par[d]?/g, "\n").replace(/\\[^\s]+ ?/g, "").replace(/[{}]/g, "").trim();
+  let text = rtf.replace(/\\'([0-9a-fA-F]{2})/g, (_, hex) => {
+    return String.fromCharCode(parseInt(hex, 16));
+  });
+  const contentMatch = text.match(/\\f\d+\\fs\d+\s*\\cf\d+\s*(.+?)(?:\}|$)/s);
+  if (contentMatch) {
+    text = contentMatch[1];
+  } else {
+    const parts = text.split("}");
+    if (parts.length > 1) {
+      text = parts[parts.length - 2] || parts[parts.length - 1];
+    }
+  }
+  text = text.replace(/\\\\/g, "\n");
+  text = text.replace(/\\par\b/g, "\n");
+  text = text.replace(/\\line\b/g, "\n");
+  text = text.replace(/\\[a-zA-Z]+\d*/g, "");
+  text = text.replace(/\\./g, "");
+  text = text.replace(/[{}]/g, "");
+  text = text.replace(/\s+/g, " ");
+  text = text.replace(/^\s+|\s+$/g, "");
+  text = text.replace(/%\s*$/, "");
+  return text;
 }
 function startStickiesWatcher(opts) {
   const { stickiesDir } = opts;
   console.log("[watcher] Starting watcher for:", stickiesDir);
-  const globPattern = path.join(stickiesDir, "**/TXT.rtf");
+  const globPattern = require$$0.join(stickiesDir, "**/TXT.rtf");
   const watcher = chokidar.watch(globPattern, {
     // watch for new files, changes, deletions
     ignoreInitial: true,
@@ -58,52 +79,62 @@ function startStickiesWatcher(opts) {
 }
 function handleChange(rtfFilePath) {
   try {
-    console.log("[watcher] handleChange reading file:", rtfFilePath);
+    console.log("👀 [WATCHER] File change detected:", rtfFilePath);
+    console.log("⏰ [WATCHER] Change timestamp:", (/* @__PURE__ */ new Date()).toISOString());
+    console.log("📝 [WATCHER] Starting file change processing");
     const raw = fs.readFileSync(rtfFilePath, "utf8");
-    const plain = basicExtractPlainText(raw);
-    console.log("[watcher] extracted plain text length:", plain.length);
+    let plain = basicExtractPlainText(raw);
+    plain = plain.replace(/\\+/g, "");
+    console.log("📄 [WATCHER] Extracted plain text length:", plain.length, "characters");
+    console.log("📄 [WATCHER] Content preview:", plain.substring(0, 100) + "...");
     const prev = lastContent[rtfFilePath] || "";
     lastContent[rtfFilePath] = plain;
     const diff = plain.slice(prev.length);
-    console.log("[watcher] diff:", JSON.stringify(diff));
+    console.log("🔄 [WATCHER] Content diff:", JSON.stringify(diff));
+    console.log("📏 [WATCHER] Previous length:", prev.length, "| New length:", plain.length);
     if (!diff) return;
-    const lastChar = diff.slice(-1);
-    console.log("[watcher] lastChar test:", lastChar, "matches:", /[.!?\n]/.test(lastChar));
+    const lastChar = diff.trimEnd().slice(-1);
+    console.log("🔚 [WATCHER] Last character:", JSON.stringify(lastChar));
+    console.log("✅ [WATCHER] Sentence ending test:", /[.!?\n]/.test(lastChar));
     if (!/[.!?\n]/.test(lastChar)) return;
-    console.log("[watcher] diff triggers emit lastChar", lastChar);
-    console.log("[watcher] isBusy check:", isBusy);
+    console.log("✅ [WATCHER] Complete sentence detected! Last char:", JSON.stringify(lastChar));
+    console.log("🔄 [WATCHER] Checking if system is busy:", isBusy);
     if (isBusy) return;
+    console.log("📤 [WATCHER] Emitting input-paragraph event");
     isBusy = true;
+    const lastParagraph = getLastParagraph(plain);
+    console.log("📝 [WATCHER] Last paragraph length:", lastParagraph.length);
+    console.log("📝 [WATCHER] Last paragraph preview:", lastParagraph.substring(0, 100) + "...");
     watcherEvents.emit("input-paragraph", {
-      text: getLastParagraph(plain),
+      text: lastParagraph,
       filePath: rtfFilePath
     });
-    console.log("[watcher] emitted input-paragraph");
+    console.log("🎉 [WATCHER] Event emitted successfully!");
   } catch (err) {
-    console.error("[stickiesWatcher] Error processing change:", err);
+    console.error("❌ [WATCHER] Error processing file change:", err);
   }
 }
 function getLastParagraph(text) {
-  const parts = text.split(/\n{2,}/).filter((p) => p.trim().length > 0);
+  const sanitized = text.replace(/\\+/g, "").trim();
+  const parts = sanitized.split(/\n{2,}/).filter((p) => p.trim().length > 0);
   return parts[parts.length - 1] || text;
 }
 dotenv__namespace.config();
 try {
   if (process.platform === "win32" && require("electron-squirrel-startup")) {
-    electron.app.quit();
+    require$$1.app.quit();
   }
 } catch {
 }
 let mainWindow = null;
+const statePath = require$$0.join(require$$1.app.getPath("userData"), "window-state.json");
 let workerProcess = null;
-let lastParagraph = null;
-const statePath = path.join(electron.app.getPath("userData"), "window-state.json");
 const createFloatingWindow = () => {
-  mainWindow = new electron.BrowserWindow({
+  mainWindow = new require$$1.BrowserWindow({
     height: 500,
     width: 350,
     webPreferences: {
-      preload: path.join(__dirname, "../preload/preload.js"),
+      preload: require$$0.join(__dirname, "../preload/preload.js"),
       nodeIntegration: false,
       contextIsolation: true
     },
@@ -114,21 +145,21 @@ const createFloatingWindow = () => {
     skipTaskbar: true,
     title: "StickyRAG"
   });
-  if (!electron.app.isPackaged && process.env["ELECTRON_RENDERER_URL"]) {
+  if (!require$$1.app.isPackaged && process.env["ELECTRON_RENDERER_URL"]) {
     mainWindow.loadURL(process.env["ELECTRON_RENDERER_URL"]);
   } else {
-    mainWindow.loadFile(path.join(__dirname, "../renderer/index.html"));
+    mainWindow.loadFile(require$$0.join(__dirname, "../renderer/index.html"));
   }
   try {
     if (fs.existsSync(statePath)) {
       const state = JSON.parse(fs.readFileSync(statePath, "utf-8"));
       mainWindow.setPosition(state.x, state.y);
     } else {
-      const { width: sw } = electron.screen.getPrimaryDisplay().workAreaSize;
+      const { width: sw } = require$$1.screen.getPrimaryDisplay().workAreaSize;
       mainWindow.setPosition(sw - 350 - 20, 20);
     }
   } catch {
-    const { width: sw } = electron.screen.getPrimaryDisplay().workAreaSize;
+    const { width: sw } = require$$1.screen.getPrimaryDisplay().workAreaSize;
     mainWindow.setPosition(sw - 350 - 20, 20);
   }
   mainWindow.on("move", () => {
@@ -140,75 +171,69 @@ const createFloatingWindow = () => {
     mainWindow?.webContents.send("update-ui", { snippets: [], summary: "", inactive: true });
   });
 };
-electron.app.whenReady().then(() => {
+require$$1.app.whenReady().then(() => {
   createFloatingWindow();
   const prodFlag = process.argv.includes("--prod");
-  const defaultTestDir = path.join(process.cwd(), "test-stickies");
-  const macStickiesDir = path.join(process.env.HOME || "", "Library/Containers/com.apple.Stickies/Data/Library/Stickies");
+  const defaultTestDir = require$$0.join(process.cwd(), "test-stickies");
+  const macStickiesDir = require$$0.join(process.env.HOME || "", "Library/Containers/com.apple.Stickies/Data/Library/Stickies");
   const stickiesDir = process.env.STICKIES_DIR || (prodFlag ? macStickiesDir : defaultTestDir);
   console.log("[main] Starting watcher on Stickies dir:", stickiesDir);
   console.log("[main] Directory exists:", fs.existsSync(stickiesDir));
   startStickiesWatcher({ stickiesDir });
   watcherEvents.on("input-paragraph", (payload) => {
-    console.log("[main] input-paragraph event", payload.filePath);
-    lastParagraph = payload.text;
-    if (!workerProcess) {
-      workerProcess = startWorker();
-    }
+    mainWindow?.webContents.send("rag-started");
     setBusy(true);
-    console.log("[main] Sending paragraph to worker");
+    if (workerProcess?.killed === false) {
+      workerProcess.kill();
+    }
+    workerProcess = startWorker();
+    workerProcess.on("message", (msg) => {
+      if (msg?.type === "result") {
+        console.log("🎉 [MAIN] RAG pipeline result received!");
+        mainWindow?.webContents.send("update-ui", msg.result);
+        setBusy(false);
+      }
+    });
+    workerProcess.on("exit", (code) => {
+      console.log(`🚪 [MAIN] Worker process exited with code: ${code}`);
+      if (code !== 0) {
+        console.error("❌ [MAIN] Worker crashed. See logs above for details.");
+      }
+      setBusy(false);
+    });
+    payload.text;
     workerProcess.send({ type: "run", paragraph: payload.text });
   });
-  electron.app.on("activate", () => {
-    if (electron.BrowserWindow.getAllWindows().length === 0) {
+  require$$1.app.on("activate", () => {
+    if (require$$1.BrowserWindow.getAllWindows().length === 0) {
       createFloatingWindow();
     }
   });
 });
-electron.app.on("window-all-closed", () => {
+require$$1.app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
-    electron.app.quit();
+    require$$1.app.quit();
   }
 });
-function startWorker() {
-  const workerPath = path.join(__dirname, "../../../packages/langgraph-worker/src/index.ts");
-  const worker = child_process.fork(workerPath, ["--child"], {
-    stdio: ["pipe", "pipe", "pipe", "ipc"]
-  });
-  worker.on("message", (msg) => {
-    if (msg?.type === "result") {
-      console.log("[main] Worker result received");
-      setBusy(false);
-      mainWindow?.webContents.send("update-ui", msg.result);
-    }
-  });
-  worker.on("error", (err) => {
-    console.error("[main] Worker error:", err);
-    setBusy(false);
-  });
-  worker.on("exit", (code) => {
-    console.log("[main] Worker exited with code:", code);
-    setBusy(false);
-  });
-  return worker;
-}
-electron.ipcMain.handle("refresh-request", async () => {
+require$$1.ipcMain.handle("refresh-request", async () => {
   console.log("Refresh request received");
-  if (lastParagraph) {
-    if (!workerProcess) {
-      workerProcess = startWorker();
-    }
-    setBusy(true);
-    console.log("[main] Manual refresh with last paragraph");
-    workerProcess.send({ type: "run", paragraph: lastParagraph });
-  } else {
-    setBusy(false);
-  }
+  setBusy(false);
+  console.log("[main] isBusy reset to false via refresh");
   return {
     snippets: [],
     summary: ""
   };
 });
-electron.ipcMain.on("set-inactive", () => {
+require$$1.ipcMain.on("set-inactive", () => {
   console.log("Window set to inactive");
 });
+function startWorker() {
+  const workerPath = require$$0.join(__dirname, "../../packages/langgraph-worker/dist/index.js");
+  console.log("🔵 [MAIN] Forking worker at path:", workerPath);
+  const worker = child_process.fork(workerPath, ["--child"], {
+    stdio: ["pipe", "pipe", "pipe", "ipc"]
+  });
+  worker.stdout?.on("data", (data) => console.log(`[WORKER-STDOUT] ${data.toString()}`));
+  worker.stderr?.on("data", (data) => console.error(`[WORKER-STDERR] ${data.toString()}`));
+  return worker;
+}

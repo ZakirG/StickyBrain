@@ -9,6 +9,7 @@ import * as dotenv from 'dotenv';
 import fs from 'fs';
 import { startStickiesWatcher, watcherEvents, setBusy } from './stickiesWatcher';
 import { fork, ChildProcess } from 'child_process';
+import { Store } from 'electron-store';
 
 // Load environment variables
 dotenv.config();
@@ -24,8 +25,6 @@ try {
 }
 
 let mainWindow: BrowserWindow | null = null;
-let workerProcess: ChildProcess | null = null;
-let lastParagraph: string | null = null;
 
 // Path for window-state file
 const statePath = join(app.getPath('userData'), 'window-state.json');
@@ -34,6 +33,10 @@ interface WindowState {
   x: number;
   y: number;
 }
+
+// Keep track of the worker process
+let workerProcess: ChildProcess | null = null;
+let lastParagraph: string | null = null;
 
 /**
  * Creates the main floating window
@@ -108,15 +111,34 @@ app.whenReady().then(() => {
   startStickiesWatcher({ stickiesDir });
 
   watcherEvents.on('input-paragraph', (payload) => {
-    console.log('[main] input-paragraph event', payload.filePath);
-    lastParagraph = payload.text;
+    // Notify UI that we are starting
+    mainWindow?.webContents.send('rag-started');
     
-    if (!workerProcess) {
-      workerProcess = startWorker();
-    }
-    
+    // Start the RAG pipeline
     setBusy(true);
-    console.log('[main] Sending paragraph to worker');
+    
+    if (workerProcess?.killed === false) {
+      workerProcess.kill();
+    }
+    workerProcess = startWorker();
+    
+    workerProcess.on('message', (msg: any) => {
+      if (msg?.type === 'result') {
+        console.log('🎉 [MAIN] RAG pipeline result received!');
+        mainWindow?.webContents.send('update-ui', msg.result);
+        setBusy(false);
+      }
+    });
+
+    workerProcess.on('exit', (code) => {
+      console.log(`🚪 [MAIN] Worker process exited with code: ${code}`);
+      if (code !== 0) {
+        console.error('❌ [MAIN] Worker crashed. See logs above for details.');
+      }
+      setBusy(false);
+    });
+    
+    lastParagraph = payload.text;
     workerProcess.send({ type: 'run', paragraph: payload.text });
   });
 
@@ -135,52 +157,11 @@ app.on('window-all-closed', () => {
   }
 });
 
-/**
- * Spawn the RAG worker process
- */
-function startWorker(): ChildProcess {
-  const workerPath = join(__dirname, '../../../packages/langgraph-worker/src/index.ts');
-  const worker = fork(workerPath, ['--child'], {
-    stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
-  });
-
-  worker.on('message', (msg: any) => {
-    if (msg?.type === 'result') {
-      console.log('[main] Worker result received');
-      setBusy(false);
-      // Forward result to renderer
-      mainWindow?.webContents.send('update-ui', msg.result);
-    }
-  });
-
-  worker.on('error', (err) => {
-    console.error('[main] Worker error:', err);
-    setBusy(false);
-  });
-
-  worker.on('exit', (code) => {
-    console.log('[main] Worker exited with code:', code);
-    setBusy(false);
-  });
-
-  return worker;
-}
-
 // IPC Handlers
 ipcMain.handle('refresh-request', async () => {
   console.log('Refresh request received');
-  
-  if (lastParagraph) {
-    if (!workerProcess) {
-      workerProcess = startWorker();
-    }
-    setBusy(true);
-    console.log('[main] Manual refresh with last paragraph');
-    workerProcess.send({ type: 'run', paragraph: lastParagraph });
-  } else {
-    setBusy(false);
-  }
-  
+  setBusy(false); // allow new triggers
+  console.log('[main] isBusy reset to false via refresh');
   return {
     snippets: [],
     summary: '',
@@ -191,5 +172,26 @@ ipcMain.handle('refresh-request', async () => {
 ipcMain.on('set-inactive', () => {
   console.log('Window set to inactive');
 });
+
+function createMainWindow(): BrowserWindow {
+  const store = new Store();
+  mainWindow.loadURL(VITE_DEV_SERVER_URL);
+
+  return mainWindow;
+}
+
+function startWorker(): ChildProcess {
+  const workerPath = join(__dirname, '../../packages/langgraph-worker/dist/index.js');
+  console.log('🔵 [MAIN] Forking worker at path:', workerPath);
+  const worker = fork(workerPath, ['--child'], {
+    stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+  });
+
+  // Log stdout and stderr from worker
+  worker.stdout?.on('data', (data) => console.log(`[WORKER-STDOUT] ${data.toString()}`));
+  worker.stderr?.on('data', (data) => console.error(`[WORKER-STDERR] ${data.toString()}`));
+
+  return worker;
+}
 
 export {}; 

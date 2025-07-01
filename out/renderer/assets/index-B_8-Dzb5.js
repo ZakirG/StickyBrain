@@ -6969,12 +6969,30 @@ var m = reactDomExports;
 function App() {
   const [data, setData] = reactExports.useState({ snippets: [], summary: "" });
   const [isLoading, setIsLoading] = reactExports.useState(false);
+  const [lastUpdated, setLastUpdated] = reactExports.useState("");
+  const [debugInfo, setDebugInfo] = reactExports.useState("");
+  const [statusText, setStatusText] = reactExports.useState("Awaiting input...");
   reactExports.useEffect(() => {
+    console.log("🎨 [RENDERER] App component mounted");
+    console.log("🔌 [RENDERER] Setting up IPC listeners...");
     if (window.electronAPI) {
       window.electronAPI.onUpdate((newData) => {
-        console.log("[renderer] received update", newData);
+        console.log("📨 [RENDERER] Received update from main process:", newData);
+        console.log("📊 [RENDERER] Snippets received:", newData.snippets?.length || 0);
+        console.log("📄 [RENDERER] Summary length:", newData.summary?.length || 0);
+        const timestamp = (/* @__PURE__ */ new Date()).toLocaleTimeString();
+        setLastUpdated(timestamp);
         setData(newData);
         setIsLoading(false);
+        setStatusText("Results updated!");
+        const debug = [
+          `🕐 Updated: ${timestamp}`,
+          `📊 Snippets: ${newData.snippets?.length || 0}`,
+          `📄 Summary: ${newData.summary?.length || 0} chars`,
+          `🎯 Top similarity: ${newData.snippets?.[0]?.similarity?.toFixed(3) || "N/A"}`
+        ].join(" | ");
+        setDebugInfo(debug);
+        console.log("✅ [RENDERER] UI state updated successfully");
       });
     }
     const handleBlur = () => {
@@ -6989,19 +7007,29 @@ function App() {
     };
     window.addEventListener("blur", handleBlur);
     window.addEventListener("focus", handleFocus);
+    window.electronAPI?.onRagStart(() => {
+      console.log("🔄 [RENDERER] RAG pipeline started");
+      setIsLoading(true);
+      setData({ snippets: [], summary: "" });
+      setDebugInfo("");
+      setStatusText("Processing your note...");
+    });
     return () => {
       window.removeEventListener("blur", handleBlur);
       window.removeEventListener("focus", handleFocus);
     };
   }, []);
   const handleRefresh = async () => {
+    console.log("🔄 [RENDERER] Manual refresh button clicked");
+    console.log("📤 [RENDERER] Sending refresh request to main process...");
     if (!window.electronAPI) return;
     setIsLoading(true);
     try {
       const result = await window.electronAPI.refreshRequest();
       setData(result);
+      console.log("✅ [RENDERER] Refresh request sent successfully");
     } catch (error) {
-      console.error("Refresh failed:", error);
+      console.error("❌ [RENDERER] Refresh request failed:", error);
     } finally {
       setIsLoading(false);
     }
@@ -7028,27 +7056,70 @@ function App() {
         ]
       }
     ),
+    debugInfo && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bg-gray-800 border border-gray-700 rounded p-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-xs text-gray-400 font-mono", children: debugInfo }) }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 overflow-y-auto", children: [
-      data.summary && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mb-4 p-3 bg-white/10 rounded italic text-sm", children: data.summary }),
+      isLoading && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "absolute inset-0 bg-gray-900/80 backdrop-blur-sm flex flex-col items-center justify-center", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-2xl animate-spin", children: "🔄" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-lg font-semibold text-blue-300", children: statusText }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-gray-400", children: "Please wait while we analyze your note." })
+      ] }),
+      data.summary && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-gray-800 border border-green-600/30 rounded p-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { className: "text-sm font-semibold text-green-400 mb-2 flex items-center gap-2", children: [
+          "📄 AI Summary",
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-xs text-gray-500", children: [
+            "(",
+            data.summary.length,
+            " chars)"
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-gray-300 leading-relaxed", children: data.summary })
+      ] }),
       data.paragraph && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2 p-2 bg-yellow-800/40 rounded text-xs", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-semibold", children: "DEBUG paragraph:" }),
         " ",
         data.paragraph
       ] }),
-      data.snippets.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", children: data.snippets.map((snippet) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "p-3 bg-white/10 rounded", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between mb-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "px-2 py-1 bg-blue-500/70 rounded text-xs", children: snippet.stickyTitle }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-xs text-gray-300", children: [
-            (snippet.similarity * 100).toFixed(1),
-            "%"
-          ] })
+      data.snippets.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { className: "text-sm font-semibold text-yellow-400 flex items-center gap-2", children: [
+          "🔍 Related Snippets",
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "bg-yellow-400/20 text-yellow-300 px-2 py-0.5 rounded text-xs", children: data.snippets.length })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm line-clamp-3", children: snippet.content })
-      ] }, snippet.id)) }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-center text-gray-400 mt-8", children: [
+        data.snippets.map((snippet) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "p-3 bg-white/10 rounded", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between mb-2 flex-wrap gap-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-xs font-medium text-blue-400 flex items-center gap-1", children: [
+              "📌 ",
+              snippet.stickyTitle
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-xs text-gray-500", children: [
+                "#",
+                data.snippets.indexOf(snippet) + 1
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-xs bg-green-400/20 text-green-300 px-2 py-0.5 rounded", children: [
+                (snippet.similarity * 100).toFixed(1),
+                "% match"
+              ] })
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-gray-300 leading-relaxed", children: snippet.content }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2 pt-2 border-t border-gray-700", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-xs text-gray-500", children: [
+            "ID: ",
+            snippet.id,
+            " | Length: ",
+            snippet.content.length,
+            " chars"
+          ] }) })
+        ] }, snippet.id))
+      ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-center text-gray-400 mt-8", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-2xl mb-2", children: "🤔" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "No results yet" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs mt-2", children: "Start typing in a Sticky note" })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs mt-2", children: "Edit a Sticky note to see RAG results" })
       ] })
-    ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-center", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-gray-600", children: [
+      "🔧 RAG Pipeline Debug Mode | Last Update: ",
+      lastUpdated || "Never"
+    ] }) })
   ] });
 }
 client.createRoot(document.getElementById("root")).render(

@@ -5,21 +5,47 @@
 
 import * as dotenv from 'dotenv';
 import OpenAI from 'openai';
-import { cosineSimilarity } from './util';
+import { ChromaClient, ChromaClientParams } from 'chromadb';
+import * as path from 'path';
 
 // Import chroma client fallback
-import {
-  InMemoryChromaClient,
-  InMemoryCollection,
-} from '../../chroma-indexer/src/index';
+let InMemoryChromaClient: any;
 
 let ChromaClientCtor: any;
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  ChromaClientCtor = (await import('chromadb')).ChromaClient;
+  ChromaClientCtor = require('chromadb').ChromaClient;
 } catch {}
 
-dotenv.config();
+// Async import of chroma-indexer
+async function loadChromaIndexer() {
+  try {
+    // Use dynamic import with file:// protocol to handle ES module
+    const chromaIndexerPath = path.resolve(__dirname, '../../chroma-indexer/dist/index.js');
+    const chromaIndexer = await import(`file://${chromaIndexerPath}`);
+    InMemoryChromaClient = chromaIndexer.InMemoryChromaClient;
+    console.log('[WORKER] Successfully loaded chroma-indexer');
+  } catch (error) {
+    console.warn('[WORKER] Failed to load chroma-indexer:', error);
+    // Fallback: create a minimal stub
+    InMemoryChromaClient = class {
+      async getOrCreateCollection() {
+        return {
+          async query() { return { ids: [[]], metadatas: [[]], distances: [[]] }; }
+        };
+      }
+    };
+    console.log('[WORKER] Using fallback InMemoryChromaClient stub');
+  }
+}
+
+// Load environment variables from .env.local and .env files
+dotenv.config({ path: path.resolve(__dirname, '../../../.env.local') });
+dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
+
+console.log('[WORKER] Environment check:');
+console.log('  - OPENAI_API_KEY present:', !!process.env.OPENAI_API_KEY);
+console.log('  - CHROMA_URL:', process.env.CHROMA_URL || 'not set');
 
 export interface Snippet {
   id: string;
@@ -50,9 +76,25 @@ interface PipelineState {
   summary?: string;
 }
 
-function getChromaClient(opts: PipelineOptions): any {
+async function getChromaClient(opts: PipelineOptions): Promise<any> {
   if (opts.chromaClient) return opts.chromaClient;
-  if (ChromaClientCtor) return new ChromaClientCtor({ path: process.env.CHROMA_URL });
+  
+  // Try to use real ChromaDB if available
+  if (ChromaClientCtor) {
+    try {
+      const client = new ChromaClientCtor({ path: process.env.CHROMA_URL });
+      // Test connection
+      await client.getOrCreateCollection({ name: 'connection_test' });
+      await client.deleteCollection({ name: 'connection_test' });
+      console.log('[WORKER] Using ChromaDB server');
+      return client;
+    } catch (error) {
+      console.warn('[WORKER] ChromaDB server not available, falling back to in-memory client:', error.message);
+    }
+  }
+  
+  // Fallback to in-memory client
+  console.log('[WORKER] Using in-memory ChromaDB client');
   return new InMemoryChromaClient();
 }
 
@@ -60,80 +102,172 @@ function getOpenAI(opts: PipelineOptions): OpenAI | undefined {
   return opts.openai || (process.env.OPENAI_API_KEY ? new OpenAI() : undefined);
 }
 
+/**
+ * Generate embedding for text using OpenAI or fallback
+ */
+async function generateEmbedding(text: string, openai: OpenAI): Promise<number[]> {
+  if (process.env.OPENAI_API_KEY && process.env.NODE_ENV !== 'test') {
+    try {
+      const response = await openai.embeddings.create({
+        model: 'text-embedding-3-small',
+        input: text,
+      });
+      return response.data[0].embedding;
+    } catch (error) {
+      console.warn('🔄 [WORKER] OpenAI embedding failed, using fallback:', error);
+    }
+  }
+  
+  // Fallback: deterministic hash-based embedding
+  console.log('🔄 [WORKER] Using fallback embedding generation');
+  const result = new Array(1536).fill(0); // Match OpenAI embedding dimensions
+  for (let i = 0; i < text.length; i++) {
+    result[i % 1536] += text.charCodeAt(i);
+  }
+  return result.map(v => (v % 1000) / 1000); // Normalize
+}
+
+/**
+ * Generate summary using OpenAI or fallback
+ */
+async function generateSummary(paragraph: string, snippets: Snippet[], openai: OpenAI): Promise<string> {
+  if (process.env.OPENAI_API_KEY && process.env.NODE_ENV !== 'test') {
+    try {
+      const contextText = snippets.map(s => `- ${s.stickyTitle}: ${s.content}`).join('\n');
+      const prompt = `Summarize the following paragraph in at most 3 sentences:\n\n"${paragraph}"\n\nRelated context:\n${contextText}`;
+      
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        max_tokens: 150,
+        messages: [
+          { role: 'system', content: 'You are a concise assistant that summarizes text.' },
+          { role: 'user', content: prompt },
+        ],
+      });
+      
+      return response.choices[0].message.content || 'Summary generation failed.';
+    } catch (error) {
+      console.warn('🔄 [WORKER] OpenAI summarization failed, using fallback:', error);
+    }
+  }
+  
+  // Fallback summary
+  console.log('🔄 [WORKER] Using fallback summary generation');
+  return `Summary of paragraph (${paragraph.length} chars) with ${snippets.length} related snippets found.`;
+}
+
 /** Main RAG pipeline */
-export async function runRagPipeline(paragraphText: string, opts: PipelineOptions = {}): Promise<PipelineResult> {
-  const openai = getOpenAI(opts);
-  const chroma = getChromaClient(opts);
-  const collection = await chroma.getOrCreateCollection({ name: 'stickies_rag_v1' });
+export async function runRagPipeline(paragraph: string, options?: {
+  openai?: OpenAI;
+  chromaClient?: any;
+  similarityThreshold?: number;
+}): Promise<PipelineResult> {
+  console.log('🚀 [WORKER] Starting RAG pipeline');
+  console.log('📝 [WORKER] Input paragraph:', paragraph.substring(0, 100) + '...');
+  console.log('📏 [WORKER] Input length:', paragraph.length, 'characters');
 
-  const state: PipelineState = { paragraphText };
-
-  // Embed
-  let embedding: number[];
-  if (openai) {
-    const resp = await openai.embeddings.create({
-      model: 'text-embedding-3-small',
-      input: paragraphText,
-    });
-    embedding = resp.data[0].embedding as unknown as number[];
-  } else {
-    // deterministic fallback: simple hash
-    embedding = Array.from(paragraphText).map((c) => c.charCodeAt(0) / 255);
+  // Ensure chroma-indexer is loaded
+  if (!InMemoryChromaClient) {
+    await loadChromaIndexer();
   }
 
+  const openai = options?.openai || new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const chromaClient = options?.chromaClient || await getChromaClient({});
+  const similarityThreshold = options?.similarityThreshold || 0.75;
+
+  console.log('🔧 [WORKER] Configuration:');
+  console.log('  - OpenAI available:', !!openai);
+  console.log('  - ChromaDB client type:', chromaClient.constructor.name);
+  console.log('  - Similarity threshold:', similarityThreshold);
+
+  // Step 1: Generate embedding
+  console.log('🧠 [WORKER] Step 1: Generating embedding...');
+  const embedding = await generateEmbedding(paragraph, openai);
+  console.log('✅ [WORKER] Embedding generated, dimensions:', embedding.length);
+
+  // Step 2: Retrieve similar content
+  console.log('🔍 [WORKER] Step 2: Querying ChromaDB for similar content...');
+  const collection = await chromaClient.getOrCreateCollection({ name: 'stickies_rag_v1' });
+  
   // Retrieve top k
   const k = 5;
+  console.log('📊 [WORKER] Querying for top', k, 'similar results');
   const query = await collection.query({ queryEmbeddings: [embedding], nResults: k });
   const ids = query.ids[0] as string[];
   const metas = query.metadatas[0] as any[];
-  const embeddings = query.embeddings?.[0] as number[][] | undefined;
+  const distances = query.distances?.[0] as number[];
 
-  // Compute similarity if not returned
-  const sims: number[] = [];
-  if (query.distances) {
-    sims.push(...(query.distances[0] as number[]).map((d) => 1 - d));
-  } else if (embeddings) {
-    embeddings.forEach((emb) => sims.push(cosineSimilarity(embedding, emb)));
+  console.log('📋 [WORKER] Retrieved', ids.length, 'potential matches');
+  if (distances) {
+    console.log('📐 [WORKER] Distance range:', Math.min(...distances).toFixed(3), 'to', Math.max(...distances).toFixed(3));
   }
 
-  const snippets: Snippet[] = ids.map((id, idx) => ({
-    id,
-    stickyTitle: metas[idx]?.stickyTitle || metas[idx]?.filePath?.split('/')?.pop() || 'unknown',
-    content: metas[idx]?.text || metas[idx]?.content || '',
-    similarity: sims[idx] ?? 0,
-  }));
-
-  // Filter
-  const threshold = opts.similarityThreshold ?? 0.75;
-  const filtered = snippets.filter((s) => s.similarity >= threshold);
-
-  // Summarise
-  let summary = '';
-  if (openai) {
-    const sys = 'You are a concise assistant.';
-    const prompt = `Summarise the following paragraph in at most 3 sentences.\n\n"""${paragraphText}"""`;
-    const resp = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      max_tokens: 150,
-      messages: [
-        { role: 'system', content: sys },
-        { role: 'user', content: prompt },
-      ],
-    });
-    summary = resp.choices[0].message.content ?? '';
-  } else {
-    summary = 'Mock summary.';
+  // Step 3: Filter by similarity
+  console.log('🔬 [WORKER] Step 3: Filtering by similarity threshold...');
+  const filteredSnippets: Snippet[] = [];
+  for (let i = 0; i < ids.length; i++) {
+    const similarity = distances ? 1 - distances[i] : 0.5; // Convert distance to similarity
+    console.log(`📌 [WORKER] Result ${i + 1}: similarity=${similarity.toFixed(3)}, threshold=${similarityThreshold}`);
+    
+    if (similarity >= similarityThreshold) {
+      console.log(`✅ [WORKER] Including result ${i + 1} (similarity: ${similarity.toFixed(3)})`);
+      filteredSnippets.push({
+        id: ids[i],
+        stickyTitle: metas[i]?.stickyTitle || 'Unknown',
+        content: metas[i]?.text || 'No content',
+        similarity: parseFloat(similarity.toFixed(3)),
+      });
+    } else {
+      console.log(`❌ [WORKER] Excluding result ${i + 1} (similarity: ${similarity.toFixed(3)} < ${similarityThreshold})`);
+    }
   }
 
-  return { snippets: filtered, summary };
+  console.log('📊 [WORKER] Filtered results:', filteredSnippets.length, 'of', ids.length, 'passed threshold');
+
+  // Step 4: Generate summary
+  console.log('📝 [WORKER] Step 4: Generating AI summary...');
+  const summary = await generateSummary(paragraph, filteredSnippets, openai);
+  console.log('✅ [WORKER] Summary generated, length:', summary.length, 'characters');
+  console.log('📄 [WORKER] Summary preview:', summary.substring(0, 100) + '...');
+
+  console.log('🎉 [WORKER] RAG pipeline completed successfully!');
+  console.log('📊 [WORKER] Final results:');
+  console.log('  - Snippets:', filteredSnippets.length);
+  console.log('  - Summary length:', summary.length);
+
+  return {
+    snippets: filteredSnippets,
+    summary,
+  };
 }
 
-// Utility: if executed as worker process, listen for messages
-if (process.argv[2] === '--child') {
+// Worker process mode
+if (process.argv.includes('--child')) {
+  console.log('🔧 [WORKER] Starting in child process mode');
+  console.log('🆔 [WORKER] Process PID:', process.pid);
+  
   process.on('message', async (msg: any) => {
-    if (msg?.type === 'run' && msg.paragraph) {
-      const result = await runRagPipeline(msg.paragraph);
-      process.send?.({ type: 'result', result });
+    console.log('📨 [WORKER] Received message from main process:', JSON.stringify(msg, null, 2));
+    
+    if (msg?.type === 'run') {
+      console.log('🎯 [WORKER] Processing RAG pipeline request');
+      console.log('📝 [WORKER] Input paragraph preview:', msg.paragraph?.substring(0, 100) + '...');
+      
+      try {
+        const result = await runRagPipeline(msg.paragraph);
+        console.log('✅ [WORKER] RAG pipeline completed successfully');
+        console.log('📤 [WORKER] Sending result back to main process');
+        process.send?.({ type: 'result', result });
+        console.log('📡 [WORKER] Result sent via IPC');
+      } catch (error) {
+        console.error('❌ [WORKER] RAG pipeline error:', error);
+        console.log('📤 [WORKER] Sending error back to main process');
+        process.send?.({ type: 'error', error: (error as Error).message });
+      }
+    } else {
+      console.warn('⚠️  [WORKER] Unknown message type:', msg?.type);
     }
   });
+  
+  console.log('👂 [WORKER] Listening for messages from main process...');
 } 

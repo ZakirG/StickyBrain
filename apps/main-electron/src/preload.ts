@@ -10,6 +10,7 @@ interface ElectronAPI {
   refreshRequest: () => Promise<{ snippets: any[]; summary: string; paragraph?: string }>;
   setInactive: () => void;
   onUpdate: (callback: (data: { snippets: any[]; summary: string; paragraph?: string }) => void) => void;
+  onRagStart: (callback: () => void) => void;
 }
 
 // Expose protected methods that allow the renderer process to use
@@ -19,6 +20,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setInactive: () => ipcRenderer.send('set-inactive'),
   onUpdate: (callback: (data: { snippets: any[]; summary: string; paragraph?: string }) => void) => {
     ipcRenderer.on('update-ui', (_event, data) => callback(data));
+  },
+  onRagStart: (callback: () => void) => {
+    ipcRenderer.on('rag-started', () => callback());
   },
 } as ElectronAPI);
 

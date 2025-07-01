@@ -3,11 +3,10 @@
   "version": "1.0.0",
   "description": "StickyRAG LangGraph RAG pipeline worker",
   "main": "src/index.ts",
-  "type": "module",
   "private": true,
   "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch",
+    "build": "npx tsc",
+    "dev": "npx tsc --watch",
     "test": "vitest"
   },
   "dependencies": {

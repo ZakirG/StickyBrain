@@ -192,17 +192,54 @@ function mockEmbedding(text: string): number[] {
 }
 
 async function embedBatch(texts: string[]): Promise<number[][]> {
+  // Debug: show first 5 texts being embedded
+  texts.slice(0, 5).forEach((t, idx) => {
+    console.log(`🧠 [embed] Text ${idx + 1}: "${t.substring(0, 80)}"`);
+  });
+
   const apiKey = process.env.OPENAI_API_KEY;
 
   // Use real embeddings when possible and NODE_ENV is not 'test'
   if (apiKey && process.env.NODE_ENV !== 'test') {
     const openai = new OpenAI({ apiKey });
-    const response = await openai.embeddings.create({
-      model: 'text-embedding-3-small',
-      input: texts,
-    });
-    // The SDK returns { data: [{ embedding: number[] }, ...] }
-    return response.data.map((d: any) => d.embedding as number[]);
+
+    /** Rough token estimate (4 chars ≈ 1 token for English text) */
+    const estTokens = (txt: string) => Math.ceil(txt.length / 4);
+
+    const TOKEN_LIMIT = 7000; // keep well under 8192 hard-limit
+    const MAX_ITEMS = 50; // extra guard – Chroma batches rarely exceed this
+
+    const allEmbeddings: number[][] = [];
+    let currentBatch: string[] = [];
+    let currentTokens = 0;
+
+    async function flushBatch() {
+      if (currentBatch.length === 0) return;
+      const resp = await openai.embeddings.create({
+        model: 'text-embedding-3-small',
+        input: currentBatch,
+      });
+      resp.data.forEach((d: any) => allEmbeddings.push(d.embedding as number[]));
+      currentBatch = [];
+      currentTokens = 0;
+    }
+
+    for (const text of texts) {
+      const tkns = estTokens(text);
+
+      // If adding this text would exceed limits, flush first
+      if (currentBatch.length >= MAX_ITEMS || currentTokens + tkns > TOKEN_LIMIT) {
+        await flushBatch();
+      }
+
+      currentBatch.push(text);
+      currentTokens += tkns;
+    }
+
+    // flush remaining
+    await flushBatch();
+
+    return allEmbeddings;
   }
 
   // Fallback to local mock embeddings
@@ -249,12 +286,18 @@ export async function indexStickies(opts: IndexOptions = {}) {
           filePath: p,
           stickyTitle,
           paragraphIndex: idx,
+          text: chunk,
         },
       });
     });
   });
 
   console.log(`[index] Total paragraphs: ${paragraphs.length}`);
+
+  // Debug: print first 5 paragraphs for verification
+  paragraphs.slice(0, 5).forEach((p, idx) => {
+    console.log(`🔎 [index] Paragraph ${idx + 1}: (${p.id}) "${p.text.substring(0, 80)}"`);
+  });
 
   // Chunk into batches of 100
   const batches: typeof paragraphs[] = [];

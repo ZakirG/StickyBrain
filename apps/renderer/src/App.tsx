@@ -3,7 +3,7 @@
  * Displays a translucent panel with refresh functionality and snippet list
  */
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import './App.css';
 
 // TypeScript declaration for Electron API
@@ -13,6 +13,8 @@ declare global {
       refreshRequest: () => Promise<{ snippets: any[]; summary: string; paragraph?: string }>;
       setInactive: () => void;
       onUpdate: (callback: (data: { snippets: any[]; summary: string; paragraph?: string }) => void) => void;
+      onRagStart?: (callback: () => void) => void;
+      runEmbeddings: () => Promise<void>;
     };
   }
 }
@@ -85,7 +87,7 @@ function App() {
     window.addEventListener('blur', handleBlur);
     window.addEventListener('focus', handleFocus);
 
-    window.electronAPI?.onRagStart(() => {
+    window.electronAPI?.onRagStart?.(() => {
       console.log('🔄 [RENDERER] RAG pipeline started');
       setIsLoading(true);
       setData({ snippets: [], summary: '' });
@@ -117,22 +119,37 @@ function App() {
     }
   };
 
+  const handleRunEmbeddings = async () => {
+    if (!window.electronAPI?.runEmbeddings) return;
+    setStatusText('Reindexing embeddings...');
+    setIsLoading(true);
+    await window.electronAPI.runEmbeddings();
+    setStatusText('Reindex triggered. Waiting for updates...');
+  };
+
   return (
     <div className="h-screen w-full bg-black/70 backdrop-blur-sm text-white p-4 transition-opacity duration-200 opacity-70 hover:opacity-100 focus:opacity-100" id="root-panel">
-      {/* Header */}
-      <div
-        className="flex items-center justify-between mb-4 select-none"
-        style={{ WebkitAppRegion: 'drag' }}
-      >
-        <h1 className="text-lg font-semibold">StickyRAG</h1>
+      {/* Header Bar (drag) */}
+      <div className="h-6 mb-2 select-none" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
+        <h1 className="text-sm font-semibold">StickyRAG</h1>
+      </div>
+
+      {/* Action Bar (no-drag) */}
+      <div className="flex items-center justify-end gap-2 mb-4" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
         <button
           onClick={handleRefresh}
           disabled={isLoading}
-          className="px-3 py-1 bg-white/20 hover:bg-white/30 rounded text-sm transition-colors disabled:opacity-50"
-          style={{ WebkitAppRegion: 'no-drag' }}
+          className="px-3 py-1 bg-white/20 hover:bg-white/30 rounded text-xs transition-colors disabled:opacity-50"
           data-testid="refresh-btn"
         >
-          {isLoading ? 'Refreshing...' : 'Refresh suggestions'}
+          {isLoading ? 'Refreshing...' : 'Refresh'}
+        </button>
+        <button
+          className="px-3 py-1 text-xs bg-blue-500 hover:bg-blue-600 text-white rounded disabled:opacity-50"
+          onClick={handleRunEmbeddings}
+          disabled={isLoading}
+        >
+          Run Embeddings
         </button>
       </div>
 

@@ -1,4 +1,26 @@
 "use strict";
+var __create = Object.create;
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __getProtoOf = Object.getPrototypeOf;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+  // If the importer is in node compatibility mode or this is not an ESM
+  // file that has been converted to a CommonJS file using a Babel-
+  // compatible transform (i.e. "__esModule" has not been set), then set
+  // "default" to the CommonJS "module.exports" for node compatibility.
+  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+  mod
+));
 const electron = require("electron");
 const path = require("path");
 const dotenv = require("dotenv");
@@ -226,6 +248,48 @@ electron.ipcMain.handle("refresh-request", async () => {
 });
 electron.ipcMain.on("set-inactive", () => {
   console.log("Window set to inactive");
+});
+electron.ipcMain.handle("run-embeddings", async () => {
+  console.log("[main] Run Embeddings triggered via UI");
+  try {
+    const candidates = [
+      // Compiled JS (preferred in prod)
+      path.resolve(__dirname, "../../packages/chroma-indexer/dist/index.js"),
+      // Source JS emitted by ts-node in dev
+      path.resolve(__dirname, "../../packages/chroma-indexer/src/index.js")
+    ];
+    let chromaIndexer = null;
+    for (const p of candidates) {
+      if (fs.existsSync(p)) {
+        chromaIndexer = await import(`file://${p}`);
+        break;
+      }
+    }
+    if (!chromaIndexer) {
+      throw new Error("Could not locate chroma-indexer implementation");
+    }
+    const { indexStickies } = chromaIndexer;
+    const chroma = await import("chromadb");
+    const ChromaClientCtor = chroma.ChromaClient;
+    const chromaClient = new ChromaClientCtor({ path: process.env.CHROMA_URL });
+    const collectionName = process.env.CHROMA_COLLECTION_NAME || "stickies_rag_v1";
+    try {
+      await chromaClient.deleteCollection({ name: collectionName });
+      console.log("[main] Existing collection deleted");
+    } catch {
+    }
+    const prodFlag = process.argv.includes("--prod");
+    const defaultTestDir = path.join(process.cwd(), "test-stickies");
+    const macStickiesDir = path.join(process.env.HOME || "", "Library/Containers/com.apple.Stickies/Data/Library/Stickies");
+    const stickiesDir = process.env.STICKIES_DIR || (prodFlag ? macStickiesDir : defaultTestDir);
+    console.log("[main] Starting full reindex...");
+    await indexStickies({ client: chromaClient, stickiesDir });
+    console.log("[main] Reindex finished");
+    return { success: true };
+  } catch (err) {
+    console.error("[main] Reindex failed:", err.message);
+    return { success: false, error: err.message };
+  }
 });
 function startWorker() {
   const distPath = path.join(__dirname, "../../packages/langgraph-worker/dist/index.js");

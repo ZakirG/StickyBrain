@@ -4,7 +4,7 @@
  */
 
 import { app, BrowserWindow, ipcMain, screen } from 'electron';
-import { join } from 'path';
+import { join, resolve } from 'path';
 import * as dotenv from 'dotenv';
 import fs from 'fs';
 import { startStickiesWatcher, watcherEvents, setBusy } from './stickiesWatcher';
@@ -170,6 +170,55 @@ ipcMain.handle('refresh-request', async () => {
 // Handle window blur/focus for opacity changes
 ipcMain.on('set-inactive', () => {
   console.log('Window set to inactive');
+});
+
+ipcMain.handle('run-embeddings', async () => {
+  console.log('[main] Run Embeddings triggered via UI');
+  try {
+    // Dynamically locate chroma-indexer implementation to avoid bundler resolution
+    const candidates = [
+      // Compiled JS (preferred in prod)
+      resolve(__dirname, '../../packages/chroma-indexer/dist/index.js'),
+      // Source JS emitted by ts-node in dev
+      resolve(__dirname, '../../packages/chroma-indexer/src/index.js'),
+    ];
+
+    let chromaIndexer: any = null;
+    for (const p of candidates) {
+      if (fs.existsSync(p)) {
+        chromaIndexer = await import(`file://${p}`);
+        break;
+      }
+    }
+
+    if (!chromaIndexer) {
+      throw new Error('Could not locate chroma-indexer implementation');
+    }
+
+    const { indexStickies } = chromaIndexer as any;
+    const chroma = await import('chromadb');
+    const ChromaClientCtor = (chroma as any).ChromaClient;
+    const chromaClient = new ChromaClientCtor({ path: process.env.CHROMA_URL });
+    const collectionName = process.env.CHROMA_COLLECTION_NAME || 'stickies_rag_v1';
+    try {
+      await chromaClient.deleteCollection({ name: collectionName });
+      console.log('[main] Existing collection deleted');
+    } catch {}
+
+    // Determine stickies directory (same logic as watcher)
+    const prodFlag = process.argv.includes('--prod');
+    const defaultTestDir = join(process.cwd(), 'test-stickies');
+    const macStickiesDir = join(process.env.HOME || '', 'Library/Containers/com.apple.Stickies/Data/Library/Stickies');
+    const stickiesDir = process.env.STICKIES_DIR || (prodFlag ? macStickiesDir : defaultTestDir);
+
+    console.log('[main] Starting full reindex...');
+    await indexStickies({ client: chromaClient, stickiesDir });
+    console.log('[main] Reindex finished');
+    return { success: true };
+  } catch (err) {
+    console.error('[main] Reindex failed:', (err as Error).message);
+    return { success: false, error: (err as Error).message };
+  }
 });
 
 function startWorker(): ChildProcess {

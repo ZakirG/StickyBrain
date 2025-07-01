@@ -8,5 +8,6 @@ electron.contextBridge.exposeInMainWorld("electronAPI", {
   },
   onRagStart: (callback) => {
     electron.ipcRenderer.on("rag-started", () => callback());
-  }
+  },
+  runEmbeddings: () => electron.ipcRenderer.invoke("run-embeddings")
 });

@@ -11,6 +11,7 @@ interface ElectronAPI {
   setInactive: () => void;
   onUpdate: (callback: (data: { snippets: any[]; summary: string; paragraph?: string }) => void) => void;
   onRagStart: (callback: () => void) => void;
+  runEmbeddings: () => Promise<void>;
 }
 
 // Expose protected methods that allow the renderer process to use
@@ -24,6 +25,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onRagStart: (callback: () => void) => {
     ipcRenderer.on('rag-started', () => callback());
   },
+  runEmbeddings: () => ipcRenderer.invoke('run-embeddings'),
 } as ElectronAPI);
 
 export {}; 

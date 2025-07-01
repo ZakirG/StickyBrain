@@ -24,18 +24,67 @@ async function loadChromaIndexer() {
   const candidates = [
     // Built JS output (preferred if present)
     path.resolve(__dirname, '../../chroma-indexer/dist/index.js'),
-    // Source JS compiled by ts (often present in dev tree)
+    // JS emitted in dev tree
     path.resolve(__dirname, '../../chroma-indexer/src/index.js'),
+    // Raw TS source – will require ts-node
+    path.resolve(__dirname, '../../chroma-indexer/src/index.ts'),
   ];
 
   for (const p of candidates) {
     try {
       if (!require('fs').existsSync(p)) continue;
-      const chromaIndexer = await import(`file://${p}`);
-      InMemoryChromaClient = chromaIndexer.InMemoryChromaClient;
-      indexStickiesFn = chromaIndexer.indexStickies;
-      console.log('[WORKER] Successfully loaded chroma-indexer from', p);
-      return;
+
+      // Register ts-node on demand so that require() can handle TS files
+      if (p.endsWith('.ts')) {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        require('ts-node/register');
+      }
+
+      let chromaIndexer: any | undefined;
+
+      /*
+       * CommonJS (ts-node/register) path
+       * ---------------------------------
+       * When the worker is executed through ts-node, the module system is CJS.
+       * In that case `await import()` is transpiled to `require()` internally,
+       * but the generated specifier still contains the `file://` protocol which
+       * `require()` cannot resolve. We therefore try a plain `require(p)` first.
+       */
+      if (typeof require === 'function') {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          chromaIndexer = require(p);
+        } catch {
+          // noop – will attempt dynamic import next
+        }
+      }
+
+      /*
+       * ESM path
+       * --------
+       * If `require()` failed (or is unavailable because the code was bundled
+       * as an ES module) fall back to a native dynamic import with the
+       * `file://` prefix.
+       */
+      if (!chromaIndexer) {
+        // Use a runtime-evaluated dynamic import to avoid ts-node rewriting it
+        // into a CJS require() (which cannot handle file URLs or ESM modules).
+        try {
+          // Node supports importing either a file URL or absolute path.
+          const url = p.startsWith('/') ? `file://${p}` : p;
+          // eslint-disable-next-line no-new-func
+          chromaIndexer = await (new Function('u', 'return import(u)'))(url);
+        } catch {
+          chromaIndexer = undefined;
+        }
+      }
+
+      if (chromaIndexer) {
+        InMemoryChromaClient = chromaIndexer.InMemoryChromaClient;
+        indexStickiesFn = chromaIndexer.indexStickies;
+        console.log('[WORKER] Successfully loaded chroma-indexer from', p);
+        return;
+      }
     } catch (err) {
       console.warn('[WORKER] Could not load chroma-indexer from', p, ':', (err as Error).message);
     }
@@ -189,7 +238,7 @@ export async function runRagPipeline(paragraph: string, options?: {
 
   const openai = options?.openai || new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const chromaClient = options?.chromaClient || (await getChromaClient({}));
-  const similarityThreshold = options?.similarityThreshold || 0.75;
+  const similarityThreshold = options?.similarityThreshold ?? 0.3;
   const collectionName = process.env.CHROMA_COLLECTION_NAME || 'stickies_rag_v1';
 
   console.log('🔧 [WORKER] Configuration:');
@@ -205,6 +254,33 @@ export async function runRagPipeline(paragraph: string, options?: {
   // Step 2: Retrieve similar content
   console.log('🔍 [WORKER] Step 2: Querying ChromaDB for similar content...');
   let collection = await chromaClient.getOrCreateCollection({ name: collectionName });
+
+  // Debug: print collection stats and first few items
+  if (typeof collection.count === 'function') {
+    try {
+      const total = await collection.count();
+      console.log(`[WORKER] Collection contains ${total} vectors`);
+    } catch (err) {
+      console.warn('[WORKER] Could not count collection size:', (err as Error).message);
+    }
+  }
+
+  if (typeof collection.get === 'function') {
+    try {
+      // Many client versions accept { limit, include }
+      const previewRes: any = await collection.get({ limit: 5, include: ['metadatas', 'ids'] });
+      const idsPreview = previewRes.ids?.[0] || previewRes.ids || [];
+      const metaPreview = previewRes.metadatas?.[0] || previewRes.metadatas || [];
+      console.log('[WORKER] Preview of first 5 vectors:');
+      idsPreview.slice(0, 5).forEach((id: string, idx: number) => {
+        const meta = metaPreview[idx] || {};
+        console.log(`  ${idx + 1}. id=${id}, stickyTitle=${meta.stickyTitle || 'N/A'}, textPreview="${(meta.text || '').substring(0, 80)}"`);
+      });
+    } catch (err) {
+      console.warn('[WORKER] Could not fetch preview vectors:', (err as Error).message);
+    }
+  }
+
   const k = 5;
   console.log('📊 [WORKER] Querying for top', k, 'similar results');
   let queryResult: any;
@@ -247,11 +323,19 @@ export async function runRagPipeline(paragraph: string, options?: {
     console.log('📐 [WORKER] Distance range:', Math.min(...distances).toFixed(3), 'to', Math.max(...distances).toFixed(3));
   }
 
+  // Debug: log each retrieved snippet preview before filtering
+  ids.forEach((id, idx) => {
+    const meta = metas[idx] || {};
+    const dist = distances ? distances[idx] : 'N/A';
+    const preview = (meta.text || '').substring(0, 120).replace(/\n/g, ' ');
+    console.log(`🔎 [WORKER] Raw result ${idx + 1}: id=${id}, dist=${typeof dist === 'number' ? dist.toFixed(3) : dist}, stickyTitle=${meta.stickyTitle || 'N/A'}, preview="${preview}"`);
+  });
+
   // Step 3: Filter by similarity
   console.log('🔬 [WORKER] Step 3: Filtering by similarity threshold...');
   const filteredSnippets: Snippet[] = [];
   for (let i = 0; i < ids.length; i++) {
-    const similarity = distances ? 1 - distances[i] : 0.5; // Convert distance to similarity
+    const similarity = distances ? 1 / (1 + distances[i]) : 0.5; // Convert distance to similarity (0-1)
     console.log(`📌 [WORKER] Result ${i + 1}: similarity=${similarity.toFixed(3)}, threshold=${similarityThreshold}`);
     
     if (similarity >= similarityThreshold) {

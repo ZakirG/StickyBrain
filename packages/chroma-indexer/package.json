@@ -6,9 +6,9 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "build": "tsc",
+    "build": "npx tsc",
     "dev": "tsc --watch",
-    "index": "node dist/index.js",
+    "index": "pnpm run build && node dist/index.js",
     "test": "vitest"
   },
   "bin": {

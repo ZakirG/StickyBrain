@@ -8,6 +8,7 @@ import { join } from 'path';
 import * as dotenv from 'dotenv';
 import fs from 'fs';
 import { startStickiesWatcher, watcherEvents, setBusy } from './stickiesWatcher';
+import { fork, ChildProcess } from 'child_process';
 
 // Load environment variables
 dotenv.config();
@@ -23,6 +24,8 @@ try {
 }
 
 let mainWindow: BrowserWindow | null = null;
+let workerProcess: ChildProcess | null = null;
+let lastParagraph: string | null = null;
 
 // Path for window-state file
 const statePath = join(app.getPath('userData'), 'window-state.json');
@@ -106,12 +109,15 @@ app.whenReady().then(() => {
 
   watcherEvents.on('input-paragraph', (payload) => {
     console.log('[main] input-paragraph event', payload.filePath);
-    console.log('[main] forwarding to renderer');
-    console.log('[main] mainWindow exists:', !!mainWindow);
-    console.log('[main] mainWindow destroyed:', mainWindow?.isDestroyed());
-    // Forward to renderer for now
-    mainWindow?.webContents.send('update-ui', { snippets: [], summary: '', paragraph: payload.text });
-    console.log('[main] IPC message sent');
+    lastParagraph = payload.text;
+    
+    if (!workerProcess) {
+      workerProcess = startWorker();
+    }
+    
+    setBusy(true);
+    console.log('[main] Sending paragraph to worker');
+    workerProcess.send({ type: 'run', paragraph: payload.text });
   });
 
   app.on('activate', () => {
@@ -129,11 +135,52 @@ app.on('window-all-closed', () => {
   }
 });
 
+/**
+ * Spawn the RAG worker process
+ */
+function startWorker(): ChildProcess {
+  const workerPath = join(__dirname, '../../../packages/langgraph-worker/src/index.ts');
+  const worker = fork(workerPath, ['--child'], {
+    stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+  });
+
+  worker.on('message', (msg: any) => {
+    if (msg?.type === 'result') {
+      console.log('[main] Worker result received');
+      setBusy(false);
+      // Forward result to renderer
+      mainWindow?.webContents.send('update-ui', msg.result);
+    }
+  });
+
+  worker.on('error', (err) => {
+    console.error('[main] Worker error:', err);
+    setBusy(false);
+  });
+
+  worker.on('exit', (code) => {
+    console.log('[main] Worker exited with code:', code);
+    setBusy(false);
+  });
+
+  return worker;
+}
+
 // IPC Handlers
 ipcMain.handle('refresh-request', async () => {
   console.log('Refresh request received');
-  setBusy(false); // allow new triggers
-  console.log('[main] isBusy reset to false via refresh');
+  
+  if (lastParagraph) {
+    if (!workerProcess) {
+      workerProcess = startWorker();
+    }
+    setBusy(true);
+    console.log('[main] Manual refresh with last paragraph');
+    workerProcess.send({ type: 'run', paragraph: lastParagraph });
+  } else {
+    setBusy(false);
+  }
+  
   return {
     snippets: [],
     summary: '',

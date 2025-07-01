@@ -20,8 +20,8 @@ test('Indexer CLI indexes all sample stickies into collection', async () => {
   for (const entry of fs.readdirSync(sampleDir)) {
     if (entry.endsWith('.rtfd')) {
       const full = path.join(sampleDir, entry);
-      const text = extractTextFromRtfd(full);
-      const paragraphs = splitIntoParagraphs(text);
+      const result = extractTextFromRtfd(full);
+      const paragraphs = splitIntoParagraphs(result.text);
       expectedCount += paragraphs.length;
     }
   }

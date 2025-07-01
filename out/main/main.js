@@ -5,6 +5,7 @@ const dotenv = require("dotenv");
 const fs = require("fs");
 const chokidar = require("chokidar");
 const events = require("events");
+const child_process = require("child_process");
 function _interopNamespaceDefault(e) {
   const n = Object.create(null, { [Symbol.toStringTag]: { value: "Module" } });
   if (e) {
@@ -94,6 +95,8 @@ try {
 } catch {
 }
 let mainWindow = null;
+let workerProcess = null;
+let lastParagraph = null;
 const statePath = path.join(electron.app.getPath("userData"), "window-state.json");
 const createFloatingWindow = () => {
   mainWindow = new electron.BrowserWindow({
@@ -148,11 +151,13 @@ electron.app.whenReady().then(() => {
   startStickiesWatcher({ stickiesDir });
   watcherEvents.on("input-paragraph", (payload) => {
     console.log("[main] input-paragraph event", payload.filePath);
-    console.log("[main] forwarding to renderer");
-    console.log("[main] mainWindow exists:", !!mainWindow);
-    console.log("[main] mainWindow destroyed:", mainWindow?.isDestroyed());
-    mainWindow?.webContents.send("update-ui", { snippets: [], summary: "", paragraph: payload.text });
-    console.log("[main] IPC message sent");
+    lastParagraph = payload.text;
+    if (!workerProcess) {
+      workerProcess = startWorker();
+    }
+    setBusy(true);
+    console.log("[main] Sending paragraph to worker");
+    workerProcess.send({ type: "run", paragraph: payload.text });
   });
   electron.app.on("activate", () => {
     if (electron.BrowserWindow.getAllWindows().length === 0) {
@@ -165,10 +170,40 @@ electron.app.on("window-all-closed", () => {
     electron.app.quit();
   }
 });
+function startWorker() {
+  const workerPath = path.join(__dirname, "../../../packages/langgraph-worker/src/index.ts");
+  const worker = child_process.fork(workerPath, ["--child"], {
+    stdio: ["pipe", "pipe", "pipe", "ipc"]
+  });
+  worker.on("message", (msg) => {
+    if (msg?.type === "result") {
+      console.log("[main] Worker result received");
+      setBusy(false);
+      mainWindow?.webContents.send("update-ui", msg.result);
+    }
+  });
+  worker.on("error", (err) => {
+    console.error("[main] Worker error:", err);
+    setBusy(false);
+  });
+  worker.on("exit", (code) => {
+    console.log("[main] Worker exited with code:", code);
+    setBusy(false);
+  });
+  return worker;
+}
 electron.ipcMain.handle("refresh-request", async () => {
   console.log("Refresh request received");
-  setBusy(false);
-  console.log("[main] isBusy reset to false via refresh");
+  if (lastParagraph) {
+    if (!workerProcess) {
+      workerProcess = startWorker();
+    }
+    setBusy(true);
+    console.log("[main] Manual refresh with last paragraph");
+    workerProcess.send({ type: "run", paragraph: lastParagraph });
+  } else {
+    setBusy(false);
+  }
   return {
     snippets: [],
     summary: ""

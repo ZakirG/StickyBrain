@@ -186,7 +186,7 @@ function App() {
                   ⚡ Summary of Related Snippets from Your Old Stickies
                     <span className="text-xs text-gray-500">({section.summary.length} chars)</span>
                   </h2>
-                  <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap break-words overflow-x-auto">{section.summary}</p>
+                  <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap break-words">{section.summary}</p>
                 </div>
               )}
 

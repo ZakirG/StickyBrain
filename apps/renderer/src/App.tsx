@@ -89,7 +89,7 @@ function App() {
           className="px-3 py-1 bg-white/20 hover:bg-white/30 rounded text-sm transition-colors disabled:opacity-50"
           style={{ WebkitAppRegion: 'no-drag' }}
         >
-          {isLoading ? 'Refreshing...' : 'Refresh'}
+          {isLoading ? 'Refreshing...' : 'Refresh suggestions'}
         </button>
       </div>
 

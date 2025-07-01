@@ -16,9 +16,6 @@ unit test
 
 
 ### PROMPT 2 – Plain-Text Extraction & Chroma Index CLI
-user actions
-- Create a folder /Users/zakirgowani/Desktop/FUN_FILES/TECH/Gauntlet/FlowGenius/test-stickies containing two sample .rtfd bundles each with a TXT.rtf that has at least three paragraphs separated by blank lines.
-
 agent instructions
 - In packages/chroma-indexer:
   - implement `extractTextFromRtfd(rtfdPath): string` that strips RTF tags and returns plain text.

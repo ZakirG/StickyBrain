@@ -117,11 +117,12 @@ function handleChange(rtfFilePath: string) {
     console.log('📏 [WATCHER] Previous length:', prev.length, '| New length:', plain.length);
     if (!diff) return;
 
-    // Determine last meaningful character ignoring whitespace
-    const lastChar = diff.trimEnd().slice(-1);
-    console.log('🔚 [WATCHER] Last character:', JSON.stringify(lastChar));
-    console.log('✅ [WATCHER] Sentence ending test:', /[.!?\n]/.test(lastChar));
-    if (!/[.!?\n]/.test(lastChar)) return;
+    // Determine last meaningful character of the entire note to avoid diff quirks
+    const lastChar = plain.trim().slice(-1);
+    console.log('🔚 [WATCHER] Last character (overall note):', JSON.stringify(lastChar));
+    const sentenceEnded = /[.!?\n]/.test(lastChar);
+    console.log('✅ [WATCHER] Sentence ending test:', sentenceEnded);
+    if (!sentenceEnded) return;
 
     console.log('✅ [WATCHER] Complete sentence detected! Last char:', JSON.stringify(lastChar));
 

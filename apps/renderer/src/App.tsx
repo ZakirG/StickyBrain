@@ -278,7 +278,14 @@ function App() {
                   </h2>
                   {section.snippets.map((snippet) => {
                     const noteTitle = snippet.noteText ? extractNoteTitle(snippet.noteText) : snippet.stickyTitle;
-                    const isExpanded = expandedSnippets.has(snippet.id);
+                    const isFullContentExpanded = expandedSnippets.has(snippet.id);
+                    const isSnippetContentExpanded = expandedSnippetContent.has(snippet.id);
+                    
+                    const snippetPreview = extractPreview(snippet.content);
+                    const shouldShowSnippetToggle = snippet.content.length > snippetPreview.length;
+                    
+                    const fullContentPreview = snippet.noteText ? extractPreview(snippet.noteText) : '';
+                    const shouldShowFullContentToggle = snippet.noteText && snippet.noteText.length > fullContentPreview.length;
                     
                     return (
                       <div key={snippet.id} className="p-3 bg-white/10 rounded">
@@ -293,24 +300,41 @@ function App() {
                             </span>
                           </div>
                         </div>
-                        <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-line">
-                          {snippet.content}
-                        </p>
-                        {snippet.noteText && (
-                          <div className="mt-2">
+                        
+                        {/* Snippet Content */}
+                        <div className="mb-3">
+                          <h4 className="text-xs font-medium text-gray-400 mb-1">Snippet Text</h4>
+                          <div className="p-2 bg-gray-800/60 rounded text-xs whitespace-pre-line">
+                            {isSnippetContentExpanded ? snippet.content : snippetPreview}
+                          </div>
+                          {shouldShowSnippetToggle && (
                             <button
-                              onClick={() => toggleSnippetExpansion(snippet.id)}
-                              className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 mb-1"
+                              onClick={() => toggleSnippetContentExpansion(snippet.id)}
+                              className="text-xs text-yellow-400 hover:text-yellow-300 flex items-center gap-1 mt-1"
                             >
-                              {isExpanded ? '▼' : '▶'} Full Sticky Content
+                              {isSnippetContentExpanded ? '▼' : '▶'} {isSnippetContentExpanded ? 'Show Less' : 'Show More'}
                             </button>
-                            {isExpanded && (
-                              <div className="p-2 bg-gray-800/60 rounded text-xs whitespace-pre-wrap">
-                                {snippet.noteText}
-                              </div>
+                          )}
+                        </div>
+                        
+                        {/* Full Sticky Content */}
+                        {snippet.noteText && (
+                          <div className="mt-3">
+                            <h4 className="text-xs font-medium text-gray-400 mb-1">Full Sticky Content</h4>
+                            <div className="p-2 bg-gray-800/60 rounded text-xs whitespace-pre-line">
+                              {isFullContentExpanded ? snippet.noteText : fullContentPreview}
+                            </div>
+                            {shouldShowFullContentToggle && (
+                              <button
+                                onClick={() => toggleSnippetExpansion(snippet.id)}
+                                className="text-xs text-yellow-400 hover:text-yellow-300 flex items-center gap-1 mt-1"
+                              >
+                                {isFullContentExpanded ? '▼' : '▶'} {isFullContentExpanded ? 'Show Less' : 'Show More'}
+                              </button>
                             )}
                           </div>
                         )}
+                        
                         <div className="mt-2 pt-2 border-t border-gray-700">
                           <span className="text-xs text-gray-500">
                             ID: {snippet.id} | Length: {snippet.content.length} chars
@@ -326,9 +350,11 @@ function App() {
 
           {sections.length === 0 && !isLoading && (
             <div className="text-center text-gray-400 mt-8">
-              <div className="text-2xl mb-2">🤔</div>
-              <p>No results yet</p>
-              <p className="text-xs mt-2">Edit a Sticky note to see RAG results</p>
+              <div className="text-2xl mb-2">🧠</div>
+              <p className="text-sm">Welcome to Sticky Brain!</p>
+              <p className="text-xs mt-2 max-w-xs mx-auto leading-relaxed">
+                Start typing thoughts in a Sticky and I'll grab relevant snippets from other Stickies of yours.
+              </p>
             </div>
           )}
         </div>

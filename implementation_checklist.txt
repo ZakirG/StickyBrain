@@ -1,0 +1,183 @@
+### PROMPT 1 – Repo & Tooling Bootstrap
+
+agent instructions
+- Initialise a monorepo with pnpm workspaces:
+  - root package.json with `"workspaces": ["apps/*","packages/*"]`
+  - apps/main-electron (Electron main process)
+  - apps/renderer (React + Vite)
+  - packages/langgraph-worker (node-only)
+  - packages/chroma-indexer (node-only)
+- Add eslint, prettier, typescript, vitest, jest, electron-forge, chromadb, langgraph, chokidar, openai sdk, react, tailwind, vite, dotenv, electron-vite.
+- Configure electron-forge with the vite renderer plugin and an entry BrowserWindow named “Floating”.
+
+unit test
+- Add a vitest test that spawns `npm start` with a headless Electron (using spectron) and asserts that the BrowserWindow title equals “StickyRAG”.
+
+
+
+### PROMPT 2 – Plain-Text Extraction & Chroma Index CLI
+user actions
+- Create a folder /Users/zakirgowani/Desktop/FUN_FILES/TECH/Gauntlet/FlowGenius/test-stickies containing two sample .rtfd bundles each with a TXT.rtf that has at least three paragraphs separated by blank lines.
+
+agent instructions
+- In packages/chroma-indexer:
+  - implement `extractTextFromRtfd(rtfdPath): string` that strips RTF tags and returns plain text.
+  - implement `splitIntoParagraphs(text): string[]` on `\n\n`.
+  - create `index.ts` that:
+    - walks `~/Library/Containers/com.apple.Stickies/Data/Library/Stickies` (configurable via args)
+    - for each paragraph: embeds via OpenAI `text-embedding-3-small` (batch 100)
+    - upserts into local Chroma collection `stickies_rag_v1` with metadata `{filePath, stickyTitle, paragraphIndex}`
+- Expose as CLI `pnpm index-stickies`.
+- Stream progress to stdout.
+
+unit test
+- With TEST_STICKIES pointing to the sample folder, run the CLI and then use Chroma API to assert `collection.count()` equals total paragraphs in both test files.
+
+
+### PROMPT 3 – Floating Window UI & Manual Refresh
+user actions
+- No action; just run the app after build.
+
+agent instructions
+- In apps/renderer:
+  - Tailwind layout: translucent top-right 350×500 px frameless panel, `opacity-70` by default, hover/focus to `opacity-100` with CSS transition.
+  - Show:
+    - header “StickyRAG”
+    - Refresh button that sends `ipcRenderer.invoke("refresh-request")`
+    - scrollable list area with placeholder “No results yet”
+- In apps/main-electron:
+  - create the BrowserWindow with `alwaysOnTop`, `transparent`, `frame: false`, remembers last position in a JSON store.
+  - handle `refresh-request` by emitting a dummy result `{snippets:[], summary:""}` until real data wired.
+  - On `blur`, send `window.api.setInactive()` to renderer to fade opacity.
+
+unit test
+- Headless spectron test clicks Refresh button and verifies that `ipcRenderer.invoke` was called exactly once.
+
+
+### PROMPT 4 – File-Watcher Trigger & Concurrency Gate
+user actions
+- Add a small .rtfd file in the real Stickies directory and open it in Stickies.app ready for manual editing.
+
+agent instructions
+- In apps/main-electron:
+  - add `stickiesWatcher.ts`:
+    - chokidar watch on Stickies dir, ignoreInitial true.
+    - debounce 200 ms per file.
+    - read changed file, diff against cached last version with js diff.
+    - if last char of diff is `. ! ? or \n` AND !isBusy => emit `input-paragraph` event `{text,lastModifiedFile}`
+  - set global `isBusy` boolean; set true when sending paragraph to worker, reset on worker “done”.
+  - if `input-paragraph` comes while `isBusy` true → drop it.
+  - Manual Refresh sets `isBusy=false` then reuses last cached paragraph text (if any) to force send.
+
+unit test
+- Use tmp dir with a stub RTFD; modify its TXT.rtf contents programmatically to append “Hello world.\n”.
+- Expect an `input-paragraph` IPC message fired once and that `isBusy` is true immediately after.
+
+
+
+
+### PROMPT 5 – LangGraph Worker Pipeline (Embed ➜ Retrieve ➜ Summarise ➜ Return)
+user actions
+- Ensure `pnpm index-stickies` has run so the Chroma DB contains at least a few embeddings for tests.
+
+agent instructions
+- In packages/langgraph-worker:
+  - Build nodes:
+    - InputNode : passes through `{paragraphText}`
+    - EmbedNode : returns embedding array via OpenAI
+    - RetrieveNode : query Chroma `k=5` cosine sim
+    - FilterNode : filter sim < 0.75
+    - SummariseNode : GPT-4o-mini prompt -> 3 sentences max
+    - OutputNode : resolves `{snippets, summary}`
+  - Expose single function `runRagPipeline(paragraphText): Promise<Result>`; mark isBusy false on resolve.
+- Wire main process to spawn the worker (`child_process.fork`) and forward messages.
+
+unit test
+- Mock OpenAI embed with deterministic vector, mock GPT summarise returning “Mock summary.”.
+- Insert two fake embeddings into an in-memory Chroma instance.
+- Call `runRagPipeline("test paragraph")` and assert:
+  - result.snippets.length === 2
+  - result.summary.split(".").length-1 ≤ 3
+
+
+
+
+### PROMPT 6 – IPC End-to-End Wiring
+user actions
+- Launch Stickies and type a sentence ending in “?” inside any note.
+
+agent instructions
+- apps/main-electron listens for `input-paragraph` → calls worker.
+- worker result triggers `ipcMain.emit("update-ui", result)`.
+- preload script exposes `window.api.onUpdate(cb)` that renderer subscribes to.
+- renderer replaces placeholder list with:
+  - each snippet shows badge = stickyTitle + similarity (2 dp), paragraph text.
+  - summary at top in italic.
+- Ensure manual Refresh re-runs the last paragraph through the pipeline.
+
+unit test
+- Integration test:
+  - emit fake `input-paragraph` with text “integration test.”
+  - stub worker to return 3 snippets, summary “ok.”
+  - renderer receives update, React state list length ===3, summary text ===“ok.”.
+
+
+
+
+### PROMPT 7 – UI Polish & Opacity Behaviour
+user actions
+- Move mouse in/out of the floating window to test fade.
+
+agent instructions
+- renderer: on `window.onblur` add class `opacity-40`, on `focus` remove.
+- Ensure CSS transition 200 ms.
+- Add truncation (`line-clamp-3`) to snippet paragraphs.
+
+unit test
+- With jsdom and fireEvent blur/focus, expect `classList` to gain/drop `opacity-40`.
+
+
+
+### PROMPT 8 – Packaging Script & Smoke Test
+user actions
+- None (run CI).
+
+agent instructions
+- Configure electron-forge “make” with dmg target.
+- Add `npm run make` that outputs `out/StickyRAG.dmg`.
+- CI script (GitHub Actions) caches pnpm, runs “make”, uploads artifact.
+
+unit test
+- Jest check that after running `npm run make` the path `out/StickyRAG.dmg` exists and its size > 0 bytes.
+
+
+### PROMPT 9 – README & Quick-Start Docs
+user actions
+- Review generated README.
+
+agent instructions
+- Generate a README.md with:
+  - One-liner description
+  - “Requirements / Install / Index Stickies / Run Dev / Package”
+  - Troubleshooting FAQ (GateKeeper warning, missing OpenAI key, etc.)
+- Make sure all scripts referenced exist in package.json.
+
+unit test
+- Jest reads README.md and asserts it contains the heading “## Install” and the string “pnpm index-stickies”.
+
+
+
+### PROMPT 10 – Post-Ship Smoke Bench
+user actions
+- Type in Stickies rapidly; verify no lag and snippets update sensibly.
+
+agent instructions
+- Add a simple telemetry logger (local json) that records:
+  - query latency (ms)
+  - number of snippets
+  - summary token length
+- Log to `~/Library/Application Support/StickyRAG/telemetry.log`.
+
+unit test
+- Unit test wraps `runRagPipeline` with `performance.now()`; after resolve, log entry exists with latency field >0.
+

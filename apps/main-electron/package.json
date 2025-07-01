@@ -1,0 +1,22 @@
+{
+  "name": "main-electron",
+  "version": "1.0.0",
+  "description": "StickyRAG Electron main process",
+  "main": "../../out/main/main.js",
+  "private": true,
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "tsc",
+    "start": "electron ."
+  },
+  "dependencies": {
+    "chokidar": "^3.5.3",
+    "dotenv": "^16.3.1",
+    "electron-store": "^8.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.5",
+    "electron": "^28.1.0",
+    "typescript": "^5.3.3"
+  }
+} 

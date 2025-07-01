@@ -1,0 +1,25 @@
+{
+  "name": "langgraph-worker",
+  "version": "1.0.0",
+  "description": "StickyRAG LangGraph RAG pipeline worker",
+  "main": "src/index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "chromadb": "^1.7.3",
+    "dotenv": "^16.3.1",
+    "@langchain/langgraph": "^0.3.5",
+    "@langchain/core": "^0.3.0",
+    "openai": "^4.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.5",
+    "typescript": "^5.3.3",
+    "vitest": "^1.1.0"
+  }
+} 

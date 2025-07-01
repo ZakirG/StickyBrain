@@ -1,7 +1,7 @@
 {
   "name": "chroma-indexer",
   "version": "1.0.0",
-  "description": "StickyRAG Chroma vector database indexer",
+  "description": "StickyBrain Chroma vector database indexer",
   "main": "src/index.ts",
   "type": "module",
   "private": true,

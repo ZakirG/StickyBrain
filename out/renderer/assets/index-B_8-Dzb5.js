@@ -7041,7 +7041,7 @@ function App() {
         className: "flex items-center justify-between mb-4 select-none",
         style: { WebkitAppRegion: "drag" },
         children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-lg font-semibold", children: "StickyRAG" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-lg font-semibold", children: "StickyBrain" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             "button",
             {

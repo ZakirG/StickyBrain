@@ -43,19 +43,19 @@ let lastParagraph: string | null = null;
 const createFloatingWindow = (): void => {
   // Create the browser window with floating properties
   mainWindow = new BrowserWindow({
-    height: 500,
-    width: 350,
+    height: 800,
+    width: 550,
     webPreferences: {
       preload: join(__dirname, '../preload/preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
     },
     frame: false,
-    transparent: true,
+    transparent: false,
     alwaysOnTop: true,
     resizable: false,
     skipTaskbar: true,
-    title: 'StickyRAG',
+    title: 'StickyBrain',
   });
 
   // Load renderer depending on environment
@@ -72,12 +72,12 @@ const createFloatingWindow = (): void => {
       mainWindow.setPosition(state.x, state.y);
     } else {
       const { width: sw } = screen.getPrimaryDisplay().workAreaSize;
-      mainWindow.setPosition(sw - 350 - 20, 20);
+      mainWindow.setPosition(sw - 550 - 20, 20);
     }
   } catch {
     // If parsing fails, fall back safely
     const { width: sw } = screen.getPrimaryDisplay().workAreaSize;
-    mainWindow.setPosition(sw - 350 - 20, 20);
+    mainWindow.setPosition(sw - 550 - 20, 20);
   }
 
   // Persist position on move/end

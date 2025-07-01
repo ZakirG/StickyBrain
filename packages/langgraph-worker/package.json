@@ -1,7 +1,7 @@
 {
   "name": "langgraph-worker",
   "version": "1.0.0",
-  "description": "StickyRAG LangGraph RAG pipeline worker",
+  "description": "StickyBrain LangGraph RAG pipeline worker",
   "main": "src/index.ts",
   "private": true,
   "scripts": {

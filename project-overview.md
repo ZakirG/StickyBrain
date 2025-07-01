@@ -154,7 +154,7 @@ Sends the final LLM response to your Electron frontend.
 
 ---
 
-## 🧪 LangGraph Benefits for StickyRAG
+## 🧪 LangGraph Benefits for StickyBrain
 
 * **Stateful**: remembers what it’s seen, when it last surfaced something
 * **Composable**: easy to swap in a local LLM, different vector DB, or custom filters
@@ -187,7 +187,7 @@ File-watcher → Trigger logic → LangGraph (Embed ➜ Retrieve ➜ Summarise*)
 | **Electron main**     | Node + `chokidar`                 | Watches the Stickies folder; runs light text-diff logic; holds a single in-flight-request flag.                          |
 | **LangGraph worker**  | Node side-car (spawned from main) | Stateless pipeline functions; communicates results back through an in-memory message channel (e.g. Node `EventEmitter`). |
 | **Electron renderer** | React + Tailwind + Vite           | Renders the floating window; exposes “Refresh” button; listens for incoming snippet batches over IPC.                    |
-| **Local vector DB**   | Chroma in-process                 | Embeddings cached to disk in `~/Library/Application Support/StickyRAG/chroma`; no server to run.                         |
+| **Local vector DB**   | Chroma in-process                 | Embeddings cached to disk in `~/Library/Application Support/StickyBrain/chroma`; no server to run.                         |
 
 All of this fits in a single monorepo using `pnpm workspaces` or `bun install` for speed.
 
@@ -280,7 +280,7 @@ Use Electron’s **context-isolated IPC** (`ipcMain`, `ipcRenderer`, and a `prel
 
 * Store the OpenAI key in **Electron’s secure storage** (`keytar`) on first launch.
 * Collection name in Chroma = `"stickies_rag_v1"`.
-* App config JSON (`~/Library/Application Support/StickyRAG/config.json`) for tweakables: `similarityThreshold`, `k`, `opacityInactive`, etc.
+* App config JSON (`~/Library/Application Support/StickyBrain/config.json`) for tweakables: `similarityThreshold`, `k`, `opacityInactive`, etc.
 
 ---
 

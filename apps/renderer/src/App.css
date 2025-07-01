@@ -27,4 +27,9 @@
 
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.5);
+}
+
+/* Ensure the entire Electron window has a solid black background */
+html, body, #root {
+  @apply bg-black text-white h-full;
 } 

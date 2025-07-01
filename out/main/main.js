@@ -154,19 +154,19 @@ const statePath = path.join(electron.app.getPath("userData"), "window-state.json
 let workerProcess = null;
 const createFloatingWindow = () => {
   mainWindow = new electron.BrowserWindow({
-    height: 500,
-    width: 350,
+    height: 800,
+    width: 550,
     webPreferences: {
       preload: path.join(__dirname, "../preload/preload.js"),
       nodeIntegration: false,
       contextIsolation: true
     },
     frame: false,
-    transparent: true,
+    transparent: false,
     alwaysOnTop: true,
     resizable: false,
     skipTaskbar: true,
-    title: "StickyRAG"
+    title: "StickyBrain"
   });
   if (!electron.app.isPackaged && process.env["ELECTRON_RENDERER_URL"]) {
     mainWindow.loadURL(process.env["ELECTRON_RENDERER_URL"]);
@@ -179,11 +179,11 @@ const createFloatingWindow = () => {
       mainWindow.setPosition(state.x, state.y);
     } else {
       const { width: sw } = electron.screen.getPrimaryDisplay().workAreaSize;
-      mainWindow.setPosition(sw - 350 - 20, 20);
+      mainWindow.setPosition(sw - 550 - 20, 20);
     }
   } catch {
     const { width: sw } = electron.screen.getPrimaryDisplay().workAreaSize;
-    mainWindow.setPosition(sw - 350 - 20, 20);
+    mainWindow.setPosition(sw - 550 - 20, 20);
   }
   mainWindow.on("move", () => {
     if (!mainWindow) return;

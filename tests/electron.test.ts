@@ -50,7 +50,7 @@ test('Electron app starts with correct title', async () => {
     expect(electronProcess.killed).toBe(false);
 
     // TODO: Use spectron or electron-test-utils to actually check:
-    // - BrowserWindow title equals "StickyRAG"
+    // - BrowserWindow title equals "StickyBrain"
     // - Window properties (alwaysOnTop, transparent, etc.)
     // - IPC functionality
     

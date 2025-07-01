@@ -1,7 +1,7 @@
 {
   "name": "renderer",
   "version": "1.0.0",
-  "description": "StickyRAG React renderer",
+  "description": "StickyBrain React renderer",
   "type": "module",
   "private": true,
   "scripts": {

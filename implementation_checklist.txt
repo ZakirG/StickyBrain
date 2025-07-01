@@ -11,7 +11,7 @@ agent instructions
 - Configure electron-forge with the vite renderer plugin and an entry BrowserWindow named “Floating”.
 
 unit test
-- Add a vitest test that spawns `npm start` with a headless Electron (using spectron) and asserts that the BrowserWindow title equals “StickyRAG”.
+- Add a vitest test that spawns `npm start` with a headless Electron (using spectron) and asserts that the BrowserWindow title equals “StickyBrain”.
 
 
 
@@ -36,7 +36,7 @@ agent instructions
 - In apps/renderer:
   - Tailwind layout: translucent top-right 350×500 px frameless panel, `opacity-70` by default, hover/focus to `opacity-100` with CSS transition.
   - Show:
-    - header “StickyRAG”
+    - header “StickyBrain”
     - Refresh button that sends `ipcRenderer.invoke("refresh-request")`
     - scrollable list area with placeholder “No results yet”
 - In apps/main-electron:
@@ -138,11 +138,11 @@ user actions
 
 agent instructions
 - Configure electron-forge “make” with dmg target.
-- Add `npm run make` that outputs `out/StickyRAG.dmg`.
+- Add `npm run make` that outputs `out/StickyBrain.dmg`.
 - CI script (GitHub Actions) caches pnpm, runs “make”, uploads artifact.
 
 unit test
-- Jest check that after running `npm run make` the path `out/StickyRAG.dmg` exists and its size > 0 bytes.
+- Jest check that after running `npm run make` the path `out/StickyBrain.dmg` exists and its size > 0 bytes.
 
 
 ### PROMPT 9 – README & Quick-Start Docs
@@ -170,7 +170,7 @@ agent instructions
   - query latency (ms)
   - number of snippets
   - summary token length
-- Log to `~/Library/Application Support/StickyRAG/telemetry.log`.
+- Log to `~/Library/Application Support/StickyBrain/telemetry.log`.
 
 unit test
 - Unit test wraps `runRagPipeline` with `performance.now()`; after resolve, log entry exists with latency field >0.

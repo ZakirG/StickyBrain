@@ -1,7 +1,7 @@
 {
   "name": "main-electron",
   "version": "1.0.0",
-  "description": "StickyRAG Electron main process",
+  "description": "StickyBrain Electron main process",
   "main": "../../out/main/main.js",
   "private": true,
   "scripts": {

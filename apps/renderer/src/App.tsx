@@ -1,5 +1,5 @@
 /**
- * Main App component for StickyRAG floating window
+ * Main App component for StickyBrain floating window
  * Displays a translucent panel with refresh functionality and snippet list
  */
 
@@ -26,14 +26,15 @@ interface Snippet {
   similarity: number;
 }
 
-interface AppData {
+interface SectionData {
   snippets: Snippet[];
   summary: string;
   paragraph?: string;
 }
 
 function App() {
-  const [data, setData] = useState<AppData>({ snippets: [], summary: '' });
+  // Collection of all past RAG results (latest first)
+  const [sections, setSections] = useState<SectionData[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<string>('');
   const [debugInfo, setDebugInfo] = useState<string>('');
@@ -52,7 +53,7 @@ function App() {
         
         const timestamp = new Date().toLocaleTimeString();
         setLastUpdated(timestamp);
-        setData(newData);
+        setSections((prev) => [newData, ...prev]);
         setIsLoading(false);
         setStatusText('Results updated!');
         
@@ -69,50 +70,17 @@ function App() {
       });
     }
 
-    // Handle window blur for opacity
-    const handleBlur = () => {
-      // eslint-disable-next-line no-console
-      console.log('[renderer] window blur');
-      const el = document.getElementById('root-panel');
-      if (el) {
-        // Return to translucent state when the window loses focus
-        el.classList.remove('opacity-100');
-        el.classList.add('opacity-70');
-        el.classList.remove('bg-black');
-        el.classList.add('bg-black/70');
-      }
-      window.electronAPI?.setInactive();
-    };
-
-    const handleFocus = () => {
-      // eslint-disable-next-line no-console
-      console.log('[renderer] window focus');
-      const el = document.getElementById('root-panel');
-      if (el) {
-        // Make the panel fully opaque when the window gains focus
-        el.classList.remove('opacity-70');
-        el.classList.remove('opacity-40');
-        el.classList.add('opacity-100');
-        el.classList.remove('bg-black/70');
-        el.classList.add('bg-black');
-      }
-    };
-
-    window.addEventListener('blur', handleBlur);
-    window.addEventListener('focus', handleFocus);
+    // No opacity toggling – window stays fully opaque regardless of focus.
 
     window.electronAPI?.onRagStart?.(() => {
       console.log('🔄 [RENDERER] RAG pipeline started');
       setIsLoading(true);
-      setData({ snippets: [], summary: '' });
+      setSections([]);
       setDebugInfo('');
       setStatusText('Processing your note...');
     });
 
-    return () => {
-      window.removeEventListener('blur', handleBlur);
-      window.removeEventListener('focus', handleFocus);
-    };
+    return () => {};
   }, []);
 
   const handleRefresh = async () => {
@@ -124,7 +92,7 @@ function App() {
     setIsLoading(true);
     try {
       const result = await window.electronAPI.refreshRequest();
-      setData(result);
+      setSections((prev) => [result, ...prev]);
       console.log('✅ [RENDERER] Refresh request sent successfully');
     } catch (error) {
       console.error('❌ [RENDERER] Refresh request failed:', error);
@@ -141,6 +109,12 @@ function App() {
     setStatusText('Reindex triggered. Waiting for updates...');
   };
 
+  const handleClear = () => {
+    setSections([]);
+    setDebugInfo('');
+    setStatusText('Cleared');
+  };
+
   return (
     <>
       {/*
@@ -149,12 +123,12 @@ function App() {
         controls opacity based on window focus/blur events.
       */}
       <div
-        className="h-screen w-full bg-black/70 backdrop-blur-sm text-white p-4 transition-opacity duration-200 opacity-70"
+        className="fixed inset-0 bg-black text-white p-4 overflow-y-auto relative"
         id="root-panel"
       >
         {/* Header Bar (drag) */}
         <div className="h-6 mb-2 select-none" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
-          <h1 className="text-sm font-semibold">StickyRAG</h1>
+          <h1 className="text-sm font-semibold">StickyBrain</h1>
         </div>
 
         {/* Action Bar (no-drag) */}
@@ -162,7 +136,7 @@ function App() {
           <button
             onClick={handleRefresh}
             disabled={isLoading}
-            className="px-3 py-1 bg-white/20 hover:bg-white/30 rounded text-xs transition-colors disabled:opacity-50"
+            className="px-3 py-1 text-xs bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors disabled:opacity-50"
             data-testid="refresh-btn"
           >
             {isLoading ? 'Refreshing...' : 'Refresh'}
@@ -174,7 +148,24 @@ function App() {
           >
             Run Embeddings
           </button>
+          <button
+            className="px-3 py-1 bg-gray-700 hover:bg-gray-400 text-black rounded text-xs transition-colors disabled:opacity-50"
+            onClick={handleClear}
+            disabled={isLoading || sections.length === 0}
+            title="Clear snippets"
+          >
+            🗑
+          </button>
         </div>
+
+        {/* Global Loading Overlay */}
+        {isLoading && (
+          <div className="fixed inset-0 bg-gray-900/80 z-50 flex flex-col items-center justify-center" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+            <div className="text-4xl animate-spin">🔄</div>
+            <p className="mt-4 text-lg font-semibold text-blue-300">{statusText}</p>
+            <p className="text-sm text-gray-400">Please wait while we analyze your note.</p>
+          </div>
+        )}
 
         {/* Debug Info */}
         {debugInfo && (
@@ -184,62 +175,55 @@ function App() {
         )}
 
         {/* Content Area */}
-        <div className="flex-1 overflow-y-auto">
-          {isLoading && (
-            <div className="absolute inset-0 bg-gray-900/80 backdrop-blur-sm flex flex-col items-center justify-center">
-              <div className="text-2xl animate-spin">🔄</div>
-              <p className="mt-4 text-lg font-semibold text-blue-300">{statusText}</p>
-              <p className="text-sm text-gray-400">Please wait while we analyze your note.</p>
-            </div>
-          )}
-
-          {data.summary && (
-            <div className="bg-gray-800 border border-green-600/30 rounded p-3">
-              <h2 className="text-sm font-semibold text-green-400 mb-2 flex items-center gap-2">
-                📄 AI Summary
-                <span className="text-xs text-gray-500">({data.summary.length} chars)</span>
-              </h2>
-              <p className="text-sm text-gray-300 leading-relaxed">{data.summary}</p>
-            </div>
-          )}
-
-          {data.paragraph && (
-            <div className="mt-2 p-2 bg-yellow-800/40 rounded text-xs">
-              <span className="font-semibold">DEBUG paragraph:</span> {data.paragraph}
-            </div>
-          )}
-
-          {data.snippets.length > 0 ? (
-            <div className="space-y-3">
-              <h2 className="text-sm font-semibold text-yellow-400 flex items-center gap-2">
-                🔍 Related Snippets
-                <span className="bg-yellow-400/20 text-yellow-300 px-2 py-0.5 rounded text-xs">
-                  {data.snippets.length}
-                </span>
-              </h2>
-              {data.snippets.map((snippet) => (
-                <div key={snippet.id} className="p-3 bg-white/10 rounded">
-                  <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
-                    <span className="text-xs font-medium text-blue-400 flex items-center gap-1">
-                      📌 {snippet.stickyTitle}
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-gray-500">#{data.snippets.indexOf(snippet) + 1}</span>
-                      <span className="text-xs bg-green-400/20 text-green-300 px-2 py-0.5 rounded">
-                        {(snippet.similarity * 100).toFixed(1)}% match
-                      </span>
-                    </div>
-                  </div>
-                  <p className="text-sm text-gray-300 leading-relaxed">{snippet.content}</p>
-                  <div className="mt-2 pt-2 border-t border-gray-700">
-                    <span className="text-xs text-gray-500">
-                      ID: {snippet.id} | Length: {snippet.content.length} chars
-                    </span>
-                  </div>
+        <div className="space-y-6">
+          {/* Render each result section */}
+          {sections.map((section, idx) => (
+            <div key={idx} className="space-y-3">
+              {section.summary && (
+                <div className="bg-gray-800 border border-green-600/30 rounded p-3">
+                  <h2 className="text-sm font-semibold text-green-400 mb-2 flex items-center gap-2">
+                    📄 AI Summary
+                    <span className="text-xs text-gray-500">({section.summary.length} chars)</span>
+                  </h2>
+                  <p className="text-sm text-gray-300 leading-relaxed">{section.summary}</p>
                 </div>
-              ))}
+              )}
+
+              {section.snippets.length > 0 && (
+                <div className="space-y-3">
+                  <h2 className="text-sm font-semibold text-yellow-400 flex items-center gap-2">
+                    🔍 Related Snippets
+                    <span className="bg-yellow-400/20 text-yellow-300 px-2 py-0.5 rounded text-xs">
+                      {section.snippets.length}
+                    </span>
+                  </h2>
+                  {section.snippets.map((snippet) => (
+                    <div key={snippet.id} className="p-3 bg-white/10 rounded">
+                      <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+                        <span className="text-xs font-medium text-blue-400 flex items-center gap-1">
+                          📌 {snippet.stickyTitle}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-gray-500">#{section.snippets.indexOf(snippet) + 1}</span>
+                          <span className="text-xs bg-green-400/20 text-green-300 px-2 py-0.5 rounded">
+                            {(snippet.similarity * 100).toFixed(1)}% match
+                          </span>
+                        </div>
+                      </div>
+                      <p className="text-sm text-gray-300 leading-relaxed">{snippet.content}</p>
+                      <div className="mt-2 pt-2 border-t border-gray-700">
+                        <span className="text-xs text-gray-500">
+                          ID: {snippet.id} | Length: {snippet.content.length} chars
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-          ) : (
+          ))}
+
+          {sections.length === 0 && !isLoading && (
             <div className="text-center text-gray-400 mt-8">
               <div className="text-2xl mb-2">🤔</div>
               <p>No results yet</p>

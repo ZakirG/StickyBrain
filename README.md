@@ -1,6 +1,6 @@
-# StickyRAG
+# StickyBrain
 
-A macOS application that provides AI-powered context from your Stickies notes while you write. StickyRAG uses RAG (Retrieval-Augmented Generation) to surface relevant content from your existing Stickies notes in a floating window as you type.
+A macOS application that provides AI-powered context from your Stickies notes while you write. StickyBrain uses RAG (Retrieval-Augmented Generation) to surface relevant content from your existing Stickies notes in a floating window as you type.
 
 ## Quick Setup for macOS Stickies
 

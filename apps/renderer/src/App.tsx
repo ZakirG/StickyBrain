@@ -182,10 +182,10 @@ function App() {
               {section.summary && (
                 <div className="bg-gray-800 border border-green-600/30 rounded p-3">
                   <h2 className="text-sm font-semibold text-green-400 mb-2 flex items-center gap-2">
-                    📄 AI Summary
+                  ⚡ Summary of Related Snippets from Your Old Stickies
                     <span className="text-xs text-gray-500">({section.summary.length} chars)</span>
                   </h2>
-                  <p className="text-sm text-gray-300 leading-relaxed">{section.summary}</p>
+                  <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap break-words overflow-x-auto">{section.summary}</p>
                 </div>
               )}
 

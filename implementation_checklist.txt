@@ -32,9 +32,6 @@ unit test
 
 
 ### PROMPT 3 – Floating Window UI & Manual Refresh
-user actions
-- No action; just run the app after build.
-
 agent instructions
 - In apps/renderer:
   - Tailwind layout: translucent top-right 350×500 px frameless panel, `opacity-70` by default, hover/focus to `opacity-100` with CSS transition.

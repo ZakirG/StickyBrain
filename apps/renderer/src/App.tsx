@@ -10,9 +10,9 @@ import './App.css';
 declare global {
   interface Window {
     electronAPI: {
-      refreshRequest: () => Promise<{ snippets: any[]; summary: string }>;
+      refreshRequest: () => Promise<{ snippets: any[]; summary: string; paragraph?: string }>;
       setInactive: () => void;
-      onUpdate: (callback: (data: { snippets: any[]; summary: string }) => void) => void;
+      onUpdate: (callback: (data: { snippets: any[]; summary: string; paragraph?: string }) => void) => void;
     };
   }
 }
@@ -27,6 +27,7 @@ interface Snippet {
 interface AppData {
   snippets: Snippet[];
   summary: string;
+  paragraph?: string;
 }
 
 function App() {
@@ -36,7 +37,9 @@ function App() {
   useEffect(() => {
     // Listen for updates from main process
     if (window.electronAPI) {
-      window.electronAPI.onUpdate((newData) => {
+      window.electronAPI.onUpdate((newData: { snippets: any[]; summary: string; paragraph?: string }) => {
+        // eslint-disable-next-line no-console
+        console.log('[renderer] received update', newData);
         setData(newData);
         setIsLoading(false);
       });
@@ -44,12 +47,17 @@ function App() {
 
     // Handle window blur for opacity
     const handleBlur = () => {
-      document.body.classList.add('opacity-40');
+      // eslint-disable-next-line no-console
+      console.log('[renderer] window blur');
+      const el = document.getElementById('root-panel');
+      el?.classList.add('opacity-40');
       window.electronAPI?.setInactive();
     };
 
     const handleFocus = () => {
-      document.body.classList.remove('opacity-40');
+      // eslint-disable-next-line no-console
+      console.log('[renderer] window focus');
+      document.getElementById('root-panel')?.classList.remove('opacity-40');
     };
 
     window.addEventListener('blur', handleBlur);
@@ -76,7 +84,7 @@ function App() {
   };
 
   return (
-    <div className="h-screen w-full bg-black/70 backdrop-blur-sm text-white p-4 transition-opacity duration-200">
+    <div className="h-screen w-full bg-black/70 backdrop-blur-sm text-white p-4 transition-opacity duration-200 opacity-70 hover:opacity-100 focus:opacity-100" id="root-panel">
       {/* Header */}
       <div
         className="flex items-center justify-between mb-4 select-none"
@@ -88,6 +96,7 @@ function App() {
           disabled={isLoading}
           className="px-3 py-1 bg-white/20 hover:bg-white/30 rounded text-sm transition-colors disabled:opacity-50"
           style={{ WebkitAppRegion: 'no-drag' }}
+          data-testid="refresh-btn"
         >
           {isLoading ? 'Refreshing...' : 'Refresh suggestions'}
         </button>
@@ -98,6 +107,12 @@ function App() {
         {data.summary && (
           <div className="mb-4 p-3 bg-white/10 rounded italic text-sm">
             {data.summary}
+          </div>
+        )}
+
+        {data.paragraph && (
+          <div className="mt-2 p-2 bg-yellow-800/40 rounded text-xs">
+            <span className="font-semibold">DEBUG paragraph:</span> {data.paragraph}
           </div>
         )}
 

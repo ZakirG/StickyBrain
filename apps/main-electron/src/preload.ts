@@ -7,9 +7,9 @@ import { contextBridge, ipcRenderer } from 'electron';
 
 // Define the API interface
 interface ElectronAPI {
-  refreshRequest: () => Promise<{ snippets: any[]; summary: string }>;
+  refreshRequest: () => Promise<{ snippets: any[]; summary: string; paragraph?: string }>;
   setInactive: () => void;
-  onUpdate: (callback: (data: { snippets: any[]; summary: string }) => void) => void;
+  onUpdate: (callback: (data: { snippets: any[]; summary: string; paragraph?: string }) => void) => void;
 }
 
 // Expose protected methods that allow the renderer process to use
@@ -17,7 +17,7 @@ interface ElectronAPI {
 contextBridge.exposeInMainWorld('electronAPI', {
   refreshRequest: () => ipcRenderer.invoke('refresh-request'),
   setInactive: () => ipcRenderer.send('set-inactive'),
-  onUpdate: (callback: (data: { snippets: any[]; summary: string }) => void) => {
+  onUpdate: (callback: (data: { snippets: any[]; summary: string; paragraph?: string }) => void) => {
     ipcRenderer.on('update-ui', (_event, data) => callback(data));
   },
 } as ElectronAPI);

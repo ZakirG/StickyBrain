@@ -170,12 +170,27 @@ async function cleanSnippetText(raw) {
   try {
     const doc = await parseRtfAsync(raw);
     if (doc && doc.content) {
-      const plain = doc.content.map((para) => (para.content || []).map((span) => span.value || "").join("")).join(" ");
+      const plain = doc.content.map((para) => (para.content || []).map((span) => span.value || "").join("")).join("\n");
       return plain.trim();
     }
   } catch {
   }
-  const cleaned = raw.replace(/\\'(?:[0-9a-fA-F]{2})/g, "").replace(/\\par[d]?/g, "\n").replace(/\\\*[^\\]*\\/g, "").replace(/\\\\ /g, "\n").replace(/\\\\/g, "\n").replace(/\\[a-zA-Z]+\d*/g, "").replace(/\\/g, "").replace(/[{}]/g, "").replace(/[ \t]+/g, " ").replace(/\n\s+/g, "\n").replace(/\s+\n/g, "\n").trim();
+  let cleaned = raw;
+  cleaned = cleaned.replace(/\\\*HYPERLINK\s+"[^"]*"[^\\]*\\/g, "");
+  cleaned = cleaned.replace(/\\\*[^\\]*\\/g, "");
+  cleaned = cleaned.replace(/\\\\/g, "\n");
+  cleaned = cleaned.replace(/\\par\b/g, "\n");
+  cleaned = cleaned.replace(/\\line\b/g, "\n");
+  cleaned = cleaned.replace(/\\'(?:[0-9a-fA-F]{2})/g, "");
+  cleaned = cleaned.replace(/\\[a-zA-Z]+\d*/g, "");
+  cleaned = cleaned.replace(/\\/g, "");
+  cleaned = cleaned.replace(/[{}]/g, "");
+  cleaned = cleaned.replace(/\n{3,}/g, "\n\n");
+  cleaned = cleaned.replace(/[ \t]+/g, " ");
+  cleaned = cleaned.replace(/\n\s+/g, "\n");
+  cleaned = cleaned.replace(/\s+\n/g, "\n");
+  cleaned = cleaned.trim();
+  cleaned = cleaned.replace(/^[^a-zA-Z0-9\n]*/, "");
   console.log("🧹 [MAIN] Cleaned snippet content:", JSON.stringify(cleaned));
   return cleaned;
 }

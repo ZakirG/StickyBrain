@@ -50,6 +50,34 @@ function extractNoteTitle(noteText: string): string {
   return firstLine.length > 50 ? firstLine.substring(0, 47) + '...' : firstLine;
 }
 
+/**
+ * Extracts the first 2-3 sentences from text for preview
+ */
+function extractPreview(text: string): string {
+  if (!text) return '';
+  
+  // Split by sentence endings, keeping the punctuation
+  const sentences = text.match(/[^.!?]*[.!?]+/g) || [];
+  
+  if (sentences.length === 0) {
+    // If no sentence endings found, take first 150 characters
+    return text.length > 150 ? text.substring(0, 147) + '...' : text;
+  }
+  
+  // Take first 2-3 sentences, but limit total length
+  let preview = sentences.slice(0, 3).join(' ').trim();
+  
+  if (preview.length > 200) {
+    preview = sentences.slice(0, 2).join(' ').trim();
+  }
+  
+  if (preview.length > 200) {
+    preview = preview.substring(0, 197) + '...';
+  }
+  
+  return preview + (preview === text.trim() ? '' : '...');
+}
+
 function App() {
   // Collection of all past RAG results (latest first)
   const [sections, setSections] = useState<SectionData[]>([]);
@@ -59,6 +87,8 @@ function App() {
   const [statusText, setStatusText] = useState('Awaiting input...');
   // Track which snippets have expanded full content
   const [expandedSnippets, setExpandedSnippets] = useState<Set<string>>(new Set());
+  // Track which snippet content is expanded
+  const [expandedSnippetContent, setExpandedSnippetContent] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     console.log('🎨 [RENDERER] App component mounted');
@@ -134,10 +164,23 @@ function App() {
     setDebugInfo('');
     setStatusText('Cleared');
     setExpandedSnippets(new Set());
+    setExpandedSnippetContent(new Set());
   };
 
   const toggleSnippetExpansion = (snippetId: string) => {
     setExpandedSnippets(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(snippetId)) {
+        newSet.delete(snippetId);
+      } else {
+        newSet.add(snippetId);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleSnippetContentExpansion = (snippetId: string) => {
+    setExpandedSnippetContent(prev => {
       const newSet = new Set(prev);
       if (newSet.has(snippetId)) {
         newSet.delete(snippetId);

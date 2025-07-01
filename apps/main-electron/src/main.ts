@@ -171,10 +171,7 @@ const createFloatingWindow = (): void => {
     fs.writeFileSync(statePath, JSON.stringify({ x, y }));
   });
 
-  // Forward blur event to renderer to trigger opacity change
-  mainWindow.on('blur', () => {
-    mainWindow?.webContents.send('update-ui', { snippets: [], summary: '', inactive: true });
-  });
+  // Note: Blur event handler removed to prevent clearing content when window loses focus
 
   // Uncomment the next line if you need DevTools during debugging
   // mainWindow.webContents.openDevTools();

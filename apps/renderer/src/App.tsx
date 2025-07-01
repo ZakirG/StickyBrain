@@ -332,9 +332,9 @@ function App() {
 
         {/* Footer Debug */}
         <div className="text-center">
-          <p className="text-xs text-gray-600">
-            🔧 RAG Pipeline Debug Mode | Last Update: {lastUpdated || 'Never'}
-          </p>
+          {/* <p className="text-xs text-gray-600">
+            StickyBrain
+          </p> */}
         </div>
       </div>
     </>

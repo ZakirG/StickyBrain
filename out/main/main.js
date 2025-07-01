@@ -232,9 +232,6 @@ const createFloatingWindow = () => {
     const [x, y] = mainWindow.getPosition();
     fs.writeFileSync(statePath, JSON.stringify({ x, y }));
   });
-  mainWindow.on("blur", () => {
-    mainWindow?.webContents.send("update-ui", { snippets: [], summary: "", inactive: true });
-  });
 };
 electron.app.whenReady().then(() => {
   createFloatingWindow();

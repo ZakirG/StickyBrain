@@ -61,6 +61,66 @@ async function extractPlainTextFromRtfFile(rtfFilePath: string): Promise<string>
   }
 }
 
+async function cleanSnippetText(raw: string): Promise<string> {
+  try {
+    // Try parsing as RTF first
+    const doc = await parseRtfAsync(raw);
+    if (doc && doc.content) {
+      const plain = doc.content
+        .map((para: any) => (para.content || [])
+          .map((span: any) => span.value || '')
+          .join(''))
+        .join('\n');
+      return plain.trim();
+    }
+  } catch {
+    // If RTF parsing fails, fall back to aggressive cleaning
+  }
+  
+  // Fallback: aggressive RTF artifact removal
+  let cleaned = raw;
+  
+  // Remove hyperlink formatting: \*HYPERLINK "url"url\
+  cleaned = cleaned.replace(/\\\*HYPERLINK\s+"[^"]*"[^\\]*\\/g, '');
+  
+  // Remove other complex RTF controls
+  cleaned = cleaned.replace(/\\\*[^\\]*\\/g, '');
+  
+  // Convert RTF line breaks to actual newlines
+  cleaned = cleaned.replace(/\\\\/g, '\n');
+  cleaned = cleaned.replace(/\\par\b/g, '\n');
+  cleaned = cleaned.replace(/\\line\b/g, '\n');
+  
+  // Remove hex-encoded characters
+  cleaned = cleaned.replace(/\\'(?:[0-9a-fA-F]{2})/g, '');
+  
+  // Remove RTF control words (like \tightenfactor0)
+  cleaned = cleaned.replace(/\\[a-zA-Z]+\d*/g, '');
+  
+  // Remove any remaining single backslashes
+  cleaned = cleaned.replace(/\\/g, '');
+  
+  // Remove braces
+  cleaned = cleaned.replace(/[{}]/g, '');
+  
+  // Clean up multiple consecutive newlines (keep max 2)
+  cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+  
+  // Clean up whitespace but preserve newlines
+  cleaned = cleaned.replace(/[ \t]+/g, ' '); // collapse spaces and tabs
+  cleaned = cleaned.replace(/\n\s+/g, '\n'); // clean up whitespace after newlines
+  cleaned = cleaned.replace(/\s+\n/g, '\n'); // clean up whitespace before newlines
+  
+  // Remove any leading/trailing whitespace
+  cleaned = cleaned.trim();
+  
+  // Remove any remaining artifacts at the beginning
+  cleaned = cleaned.replace(/^[^a-zA-Z0-9\n]*/, '');
+  
+  console.log('🧹 [MAIN] Cleaned snippet content:', JSON.stringify(cleaned));
+  return cleaned;
+}
+
 /**
  * Creates the main floating window
  */
@@ -153,9 +213,9 @@ app.whenReady().then(() => {
           msg.result.snippets = await Promise.all(msg.result.snippets.map(async (s: any) => {
             if (s.filePath) {
               const noteText = await extractPlainTextFromRtfFile(joinPath(s.filePath, 'TXT.rtf'));
-              return { ...s, noteText };
+              return { ...s, noteText, content: await cleanSnippetText(s.content || '') };
             }
-            return s;
+            return { ...s, content: await cleanSnippetText(s.content || '') };
           }));
         }
         mainWindow?.webContents.send('update-ui', msg.result);

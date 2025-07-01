@@ -25,12 +25,29 @@ interface Snippet {
   content: string;
   similarity: number;
   noteText?: string;
+  noteTitle?: string;
 }
 
 interface SectionData {
   snippets: Snippet[];
   summary: string;
   paragraph?: string;
+}
+
+/**
+ * Converts **bold** markdown to HTML while preserving newlines
+ */
+function formatBoldText(text: string): string {
+  return text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+}
+
+/**
+ * Extracts the first line from note text to use as title
+ */
+function extractNoteTitle(noteText: string): string {
+  if (!noteText) return '';
+  const firstLine = noteText.split('\n')[0].trim();
+  return firstLine.length > 50 ? firstLine.substring(0, 47) + '...' : firstLine;
 }
 
 function App() {
@@ -40,6 +57,8 @@ function App() {
   const [lastUpdated, setLastUpdated] = useState<string>('');
   const [debugInfo, setDebugInfo] = useState<string>('');
   const [statusText, setStatusText] = useState('Awaiting input...');
+  // Track which snippets have expanded full content
+  const [expandedSnippets, setExpandedSnippets] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     console.log('🎨 [RENDERER] App component mounted');
@@ -114,6 +133,19 @@ function App() {
     setSections([]);
     setDebugInfo('');
     setStatusText('Cleared');
+    setExpandedSnippets(new Set());
+  };
+
+  const toggleSnippetExpansion = (snippetId: string) => {
+    setExpandedSnippets(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(snippetId)) {
+        newSet.delete(snippetId);
+      } else {
+        newSet.add(snippetId);
+      }
+      return newSet;
+    });
   };
 
   return (
@@ -186,7 +218,10 @@ function App() {
                   ⚡ Summary of Related Snippets from Your Old Stickies
                     <span className="text-xs text-gray-500">({section.summary.length} chars)</span>
                   </h2>
-                  <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap break-words">{section.summary}</p>
+                  <p 
+                    className="text-sm text-gray-300 leading-relaxed break-words whitespace-pre-line"
+                    dangerouslySetInnerHTML={{ __html: formatBoldText(section.summary) }}
+                  ></p>
                 </div>
               )}
 
@@ -198,32 +233,49 @@ function App() {
                       {section.snippets.length}
                     </span>
                   </h2>
-                  {section.snippets.map((snippet) => (
-                    <div key={snippet.id} className="p-3 bg-white/10 rounded">
-                      <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
-                        <span className="text-xs font-medium text-blue-400 flex items-center gap-1">
-                          📌 {snippet.stickyTitle}
-                        </span>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-gray-500">#{section.snippets.indexOf(snippet) + 1}</span>
-                          <span className="text-xs bg-green-400/20 text-green-300 px-2 py-0.5 rounded">
-                            {(snippet.similarity * 100).toFixed(1)}% match
+                  {section.snippets.map((snippet) => {
+                    const noteTitle = snippet.noteText ? extractNoteTitle(snippet.noteText) : snippet.stickyTitle;
+                    const isExpanded = expandedSnippets.has(snippet.id);
+                    
+                    return (
+                      <div key={snippet.id} className="p-3 bg-white/10 rounded">
+                        <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+                          <span className="text-xs font-medium text-blue-400 flex items-center gap-1">
+                            📌 {noteTitle}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-500">#{section.snippets.indexOf(snippet) + 1}</span>
+                            <span className="text-xs bg-green-400/20 text-green-300 px-2 py-0.5 rounded">
+                              {(snippet.similarity * 100).toFixed(1)}% match
+                            </span>
+                          </div>
+                        </div>
+                        <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-line">
+                          {snippet.content}
+                        </p>
+                        {snippet.noteText && (
+                          <div className="mt-2">
+                            <button
+                              onClick={() => toggleSnippetExpansion(snippet.id)}
+                              className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 mb-1"
+                            >
+                              {isExpanded ? '▼' : '▶'} Full Sticky Content
+                            </button>
+                            {isExpanded && (
+                              <div className="p-2 bg-gray-800/60 rounded text-xs whitespace-pre-wrap">
+                                {snippet.noteText}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        <div className="mt-2 pt-2 border-t border-gray-700">
+                          <span className="text-xs text-gray-500">
+                            ID: {snippet.id} | Length: {snippet.content.length} chars
                           </span>
                         </div>
                       </div>
-                      <p className="text-sm text-gray-300 leading-relaxed">{snippet.content}</p>
-                      {snippet.noteText && (
-                        <div className="mt-2 p-2 bg-gray-800/60 rounded text-xs whitespace-pre-wrap">
-                          {snippet.noteText}
-                        </div>
-                      )}
-                      <div className="mt-2 pt-2 border-t border-gray-700">
-                        <span className="text-xs text-gray-500">
-                          ID: {snippet.id} | Length: {snippet.content.length} chars
-                        </span>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

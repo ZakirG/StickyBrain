@@ -152,6 +152,19 @@ try {
 let mainWindow = null;
 const statePath = path.join(electron.app.getPath("userData"), "window-state.json");
 let workerProcess = null;
+function extractPlainTextFromRtfFile(rtfFilePath) {
+  try {
+    const raw = fs.readFileSync(rtfFilePath, "utf8");
+    let text = raw.replace(/\\'([0-9a-fA-F]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+    text = text.replace(/\\par[d]?/g, "\n");
+    text = text.replace(/\\[a-zA-Z]+-?\d* ?/g, "");
+    text = text.replace(/[{}]/g, "");
+    text = text.replace(/[ \t\r]+/g, " ").trim();
+    return text;
+  } catch {
+    return "";
+  }
+}
 const createFloatingWindow = () => {
   mainWindow = new electron.BrowserWindow({
     height: 800,
@@ -213,6 +226,15 @@ electron.app.whenReady().then(() => {
     workerProcess.on("message", (msg) => {
       if (msg?.type === "result") {
         console.log("🎉 [MAIN] RAG pipeline result received!");
+        if (msg.result?.snippets) {
+          msg.result.snippets = msg.result.snippets.map((s) => {
+            if (s.filePath) {
+              const noteText = extractPlainTextFromRtfFile(path.join(s.filePath, "TXT.rtf"));
+              return { ...s, noteText };
+            }
+            return s;
+          });
+        }
         mainWindow?.webContents.send("update-ui", msg.result);
         setBusy(false);
       }

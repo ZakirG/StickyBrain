@@ -117,6 +117,7 @@ export interface Snippet {
   stickyTitle: string;
   content: string;
   similarity: number;
+  filePath?: string;
 }
 
 export interface PipelineResult {
@@ -345,6 +346,7 @@ export async function runRagPipeline(paragraph: string, options?: {
         stickyTitle: metas[i]?.stickyTitle || 'Unknown',
         content: metas[i]?.text || 'No content',
         similarity: parseFloat(similarity.toFixed(3)),
+        filePath: metas[i]?.filePath,
       });
     } else {
       console.log(`❌ [WORKER] Excluding result ${i + 1} (similarity: ${similarity.toFixed(3)} < ${similarityThreshold})`);
@@ -374,29 +376,19 @@ export async function runRagPipeline(paragraph: string, options?: {
 if (process.argv.includes('--child')) {
   console.log('🔧 [WORKER] Starting in child process mode');
   console.log('🆔 [WORKER] Process PID:', process.pid);
-  
+
   process.on('message', async (msg: any) => {
-    console.log('📨 [WORKER] Received message from main process:', JSON.stringify(msg, null, 2));
-    
     if (msg?.type === 'run') {
-      console.log('🎯 [WORKER] Processing RAG pipeline request');
-      console.log('📝 [WORKER] Input paragraph preview:', msg.paragraph?.substring(0, 100) + '...');
-      
+      console.log('📨 [WORKER] Received run message');
       try {
         const result = await runRagPipeline(msg.paragraph);
-        console.log('✅ [WORKER] RAG pipeline completed successfully');
-        console.log('📤 [WORKER] Sending result back to main process');
         process.send?.({ type: 'result', result });
-        console.log('📡 [WORKER] Result sent via IPC');
       } catch (error) {
-        console.error('❌ [WORKER] RAG pipeline error:', error);
-        console.log('📤 [WORKER] Sending error back to main process');
+        console.error('❌ [WORKER] Error processing paragraph:', error);
         process.send?.({ type: 'error', error: (error as Error).message });
       }
-    } else {
-      console.warn('⚠️  [WORKER] Unknown message type:', msg?.type);
     }
   });
-  
+
   console.log('👂 [WORKER] Listening for messages from main process...');
-} 
+}

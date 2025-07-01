@@ -9,6 +9,7 @@ import * as dotenv from 'dotenv';
 import fs from 'fs';
 import { startStickiesWatcher, watcherEvents, setBusy } from './stickiesWatcher';
 import { fork, ChildProcess } from 'child_process';
+import { join as joinPath } from 'path';
 
 // Load environment variables
 dotenv.config();
@@ -36,6 +37,22 @@ interface WindowState {
 // Keep track of the worker process
 let workerProcess: ChildProcess | null = null;
 let lastParagraph: string | null = null;
+
+// utility to extract plain text quickly
+function extractPlainTextFromRtfFile(rtfFilePath: string): string {
+  try {
+    const raw = fs.readFileSync(rtfFilePath, 'utf8');
+    // Basic stripping: hex encoding
+    let text = raw.replace(/\\'([0-9a-fA-F]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+    text = text.replace(/\\par[d]?/g, '\n');
+    text = text.replace(/\\[a-zA-Z]+-?\d* ?/g, '');
+    text = text.replace(/[{}]/g, '');
+    text = text.replace(/[ \t\r]+/g, ' ').trim();
+    return text;
+  } catch {
+    return '';
+  }
+}
 
 /**
  * Creates the main floating window
@@ -124,6 +141,16 @@ app.whenReady().then(() => {
     workerProcess.on('message', (msg: any) => {
       if (msg?.type === 'result') {
         console.log('🎉 [MAIN] RAG pipeline result received!');
+        // Enrich snippets with full note text
+        if (msg.result?.snippets) {
+          msg.result.snippets = msg.result.snippets.map((s: any) => {
+            if (s.filePath) {
+              const noteText = extractPlainTextFromRtfFile(joinPath(s.filePath, 'TXT.rtf'));
+              return { ...s, noteText };
+            }
+            return s;
+          });
+        }
         mainWindow?.webContents.send('update-ui', msg.result);
         setBusy(false);
       }

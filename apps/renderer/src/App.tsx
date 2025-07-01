@@ -24,6 +24,7 @@ interface Snippet {
   stickyTitle: string;
   content: string;
   similarity: number;
+  noteText?: string;
 }
 
 interface SectionData {
@@ -211,6 +212,11 @@ function App() {
                         </div>
                       </div>
                       <p className="text-sm text-gray-300 leading-relaxed">{snippet.content}</p>
+                      {snippet.noteText && (
+                        <div className="mt-2 p-2 bg-gray-800/60 rounded text-xs whitespace-pre-wrap">
+                          {snippet.noteText}
+                        </div>
+                      )}
                       <div className="mt-2 pt-2 border-t border-gray-700">
                         <span className="text-xs text-gray-500">
                           ID: {snippet.id} | Length: {snippet.content.length} chars

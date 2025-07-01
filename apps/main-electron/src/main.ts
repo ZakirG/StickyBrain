@@ -9,7 +9,6 @@ import * as dotenv from 'dotenv';
 import fs from 'fs';
 import { startStickiesWatcher, watcherEvents, setBusy } from './stickiesWatcher';
 import { fork, ChildProcess } from 'child_process';
-import { Store } from 'electron-store';
 
 // Load environment variables
 dotenv.config();
@@ -173,18 +172,18 @@ ipcMain.on('set-inactive', () => {
   console.log('Window set to inactive');
 });
 
-function createMainWindow(): BrowserWindow {
-  const store = new Store();
-  mainWindow.loadURL(VITE_DEV_SERVER_URL);
-
-  return mainWindow;
-}
-
 function startWorker(): ChildProcess {
-  const workerPath = join(__dirname, '../../packages/langgraph-worker/dist/index.js');
+  const distPath = join(__dirname, '../../packages/langgraph-worker/dist/index.js');
+  const srcPath = join(__dirname, '../../packages/langgraph-worker/src/index.ts');
+
+  // Use TypeScript source in development (not packaged) to pick up latest edits
+  const useTsSource = !app.isPackaged || process.env.LANGGRAPH_WORKER_TS === '1';
+  const workerPath = useTsSource ? srcPath : distPath;
+
   console.log('🔵 [MAIN] Forking worker at path:', workerPath);
   const worker = fork(workerPath, ['--child'], {
     stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+    execArgv: useTsSource ? ['-r', 'ts-node/register'] : [],
   });
 
   // Log stdout and stderr from worker

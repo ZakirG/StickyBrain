@@ -1,10 +1,10 @@
 "use strict";
-const require$$1 = require("electron");
-const require$$0 = require("path");
+const electron = require("electron");
+const path = require("path");
 const dotenv = require("dotenv");
 const fs = require("fs");
 const chokidar = require("chokidar");
-const require$$5 = require("events");
+const events = require("events");
 const child_process = require("child_process");
 function _interopNamespaceDefault(e) {
   const n = Object.create(null, { [Symbol.toStringTag]: { value: "Module" } });
@@ -23,7 +23,7 @@ function _interopNamespaceDefault(e) {
   return Object.freeze(n);
 }
 const dotenv__namespace = /* @__PURE__ */ _interopNamespaceDefault(dotenv);
-const watcherEvents = new require$$5.EventEmitter();
+const watcherEvents = new events.EventEmitter();
 let isBusy = false;
 function setBusy(val) {
   isBusy = val;
@@ -58,7 +58,7 @@ function basicExtractPlainText(rtf) {
 function startStickiesWatcher(opts) {
   const { stickiesDir } = opts;
   console.log("[watcher] Starting watcher for:", stickiesDir);
-  const globPattern = require$$0.join(stickiesDir, "**/TXT.rtf");
+  const globPattern = path.join(stickiesDir, "**/TXT.rtf");
   const watcher = chokidar.watch(globPattern, {
     // watch for new files, changes, deletions
     ignoreInitial: true,
@@ -122,19 +122,19 @@ function getLastParagraph(text) {
 dotenv__namespace.config();
 try {
   if (process.platform === "win32" && require("electron-squirrel-startup")) {
-    require$$1.app.quit();
+    electron.app.quit();
   }
 } catch {
 }
 let mainWindow = null;
-const statePath = require$$0.join(require$$1.app.getPath("userData"), "window-state.json");
+const statePath = path.join(electron.app.getPath("userData"), "window-state.json");
 let workerProcess = null;
 const createFloatingWindow = () => {
-  mainWindow = new require$$1.BrowserWindow({
+  mainWindow = new electron.BrowserWindow({
     height: 500,
     width: 350,
     webPreferences: {
-      preload: require$$0.join(__dirname, "../preload/preload.js"),
+      preload: path.join(__dirname, "../preload/preload.js"),
       nodeIntegration: false,
       contextIsolation: true
     },
@@ -145,21 +145,21 @@ const createFloatingWindow = () => {
     skipTaskbar: true,
     title: "StickyRAG"
   });
-  if (!require$$1.app.isPackaged && process.env["ELECTRON_RENDERER_URL"]) {
+  if (!electron.app.isPackaged && process.env["ELECTRON_RENDERER_URL"]) {
     mainWindow.loadURL(process.env["ELECTRON_RENDERER_URL"]);
   } else {
-    mainWindow.loadFile(require$$0.join(__dirname, "../renderer/index.html"));
+    mainWindow.loadFile(path.join(__dirname, "../renderer/index.html"));
   }
   try {
     if (fs.existsSync(statePath)) {
       const state = JSON.parse(fs.readFileSync(statePath, "utf-8"));
       mainWindow.setPosition(state.x, state.y);
     } else {
-      const { width: sw } = require$$1.screen.getPrimaryDisplay().workAreaSize;
+      const { width: sw } = electron.screen.getPrimaryDisplay().workAreaSize;
       mainWindow.setPosition(sw - 350 - 20, 20);
     }
   } catch {
-    const { width: sw } = require$$1.screen.getPrimaryDisplay().workAreaSize;
+    const { width: sw } = electron.screen.getPrimaryDisplay().workAreaSize;
     mainWindow.setPosition(sw - 350 - 20, 20);
   }
   mainWindow.on("move", () => {
@@ -171,11 +171,11 @@ const createFloatingWindow = () => {
     mainWindow?.webContents.send("update-ui", { snippets: [], summary: "", inactive: true });
   });
 };
-require$$1.app.whenReady().then(() => {
+electron.app.whenReady().then(() => {
   createFloatingWindow();
   const prodFlag = process.argv.includes("--prod");
-  const defaultTestDir = require$$0.join(process.cwd(), "test-stickies");
-  const macStickiesDir = require$$0.join(process.env.HOME || "", "Library/Containers/com.apple.Stickies/Data/Library/Stickies");
+  const defaultTestDir = path.join(process.cwd(), "test-stickies");
+  const macStickiesDir = path.join(process.env.HOME || "", "Library/Containers/com.apple.Stickies/Data/Library/Stickies");
   const stickiesDir = process.env.STICKIES_DIR || (prodFlag ? macStickiesDir : defaultTestDir);
   console.log("[main] Starting watcher on Stickies dir:", stickiesDir);
   console.log("[main] Directory exists:", fs.existsSync(stickiesDir));
@@ -204,18 +204,18 @@ require$$1.app.whenReady().then(() => {
     payload.text;
     workerProcess.send({ type: "run", paragraph: payload.text });
   });
-  require$$1.app.on("activate", () => {
-    if (require$$1.BrowserWindow.getAllWindows().length === 0) {
+  electron.app.on("activate", () => {
+    if (electron.BrowserWindow.getAllWindows().length === 0) {
       createFloatingWindow();
     }
   });
 });
-require$$1.app.on("window-all-closed", () => {
+electron.app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
-    require$$1.app.quit();
+    electron.app.quit();
   }
 });
-require$$1.ipcMain.handle("refresh-request", async () => {
+electron.ipcMain.handle("refresh-request", async () => {
   console.log("Refresh request received");
   setBusy(false);
   console.log("[main] isBusy reset to false via refresh");
@@ -224,14 +224,18 @@ require$$1.ipcMain.handle("refresh-request", async () => {
     summary: ""
   };
 });
-require$$1.ipcMain.on("set-inactive", () => {
+electron.ipcMain.on("set-inactive", () => {
   console.log("Window set to inactive");
 });
 function startWorker() {
-  const workerPath = require$$0.join(__dirname, "../../packages/langgraph-worker/dist/index.js");
+  const distPath = path.join(__dirname, "../../packages/langgraph-worker/dist/index.js");
+  const srcPath = path.join(__dirname, "../../packages/langgraph-worker/src/index.ts");
+  const useTsSource = !electron.app.isPackaged || process.env.LANGGRAPH_WORKER_TS === "1";
+  const workerPath = useTsSource ? srcPath : distPath;
   console.log("🔵 [MAIN] Forking worker at path:", workerPath);
   const worker = child_process.fork(workerPath, ["--child"], {
-    stdio: ["pipe", "pipe", "pipe", "ipc"]
+    stdio: ["pipe", "pipe", "pipe", "ipc"],
+    execArgv: useTsSource ? ["-r", "ts-node/register"] : []
   });
   worker.stdout?.on("data", (data) => console.log(`[WORKER-STDOUT] ${data.toString()}`));
   worker.stderr?.on("data", (data) => console.error(`[WORKER-STDERR] ${data.toString()}`));

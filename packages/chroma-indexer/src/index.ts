@@ -288,7 +288,8 @@ export async function indexStickies(opts: IndexOptions = {}) {
     (globalThis as any).__chromadbClient = client;
   }
 
-  const collection = await client.getOrCreateCollection({ name: 'stickies_rag_v1' });
+  const collectionName = process.env.CHROMA_COLLECTION_NAME || 'stickies_rag_v1';
+  const collection = await client.getOrCreateCollection({ name: collectionName });
 
   let processed = 0;
   for (const batch of batches) {

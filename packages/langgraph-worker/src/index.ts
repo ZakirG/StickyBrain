@@ -7,9 +7,11 @@ import * as dotenv from 'dotenv';
 import OpenAI from 'openai';
 import { ChromaClient, ChromaClientParams } from 'chromadb';
 import * as path from 'path';
+import { homedir } from 'os';
 
 // Import chroma client fallback
 let InMemoryChromaClient: any;
+let indexStickiesFn: undefined | ((opts?: any) => Promise<any>);
 
 let ChromaClientCtor: any;
 try {
@@ -19,24 +21,38 @@ try {
 
 // Async import of chroma-indexer
 async function loadChromaIndexer() {
-  try {
-    // Use dynamic import with file:// protocol to handle ES module
-    const chromaIndexerPath = path.resolve(__dirname, '../../chroma-indexer/dist/index.js');
-    const chromaIndexer = await import(`file://${chromaIndexerPath}`);
-    InMemoryChromaClient = chromaIndexer.InMemoryChromaClient;
-    console.log('[WORKER] Successfully loaded chroma-indexer');
-  } catch (error) {
-    console.warn('[WORKER] Failed to load chroma-indexer:', error);
-    // Fallback: create a minimal stub
-    InMemoryChromaClient = class {
-      async getOrCreateCollection() {
-        return {
-          async query() { return { ids: [[]], metadatas: [[]], distances: [[]] }; }
-        };
-      }
-    };
-    console.log('[WORKER] Using fallback InMemoryChromaClient stub');
+  const candidates = [
+    // Built JS output (preferred if present)
+    path.resolve(__dirname, '../../chroma-indexer/dist/index.js'),
+    // Source JS compiled by ts (often present in dev tree)
+    path.resolve(__dirname, '../../chroma-indexer/src/index.js'),
+  ];
+
+  for (const p of candidates) {
+    try {
+      if (!require('fs').existsSync(p)) continue;
+      const chromaIndexer = await import(`file://${p}`);
+      InMemoryChromaClient = chromaIndexer.InMemoryChromaClient;
+      indexStickiesFn = chromaIndexer.indexStickies;
+      console.log('[WORKER] Successfully loaded chroma-indexer from', p);
+      return;
+    } catch (err) {
+      console.warn('[WORKER] Could not load chroma-indexer from', p, ':', (err as Error).message);
+    }
   }
+
+  // If we reached here, loading failed – fall back to stub
+  InMemoryChromaClient = class {
+    async getOrCreateCollection() {
+      return {
+        async query() {
+          return { ids: [[]], metadatas: [[]], distances: [[]] };
+        },
+      };
+    }
+  };
+  indexStickiesFn = undefined;
+  console.log('[WORKER] Using fallback InMemoryChromaClient stub');
 }
 
 // Load environment variables from .env.local and .env files
@@ -172,8 +188,9 @@ export async function runRagPipeline(paragraph: string, options?: {
   }
 
   const openai = options?.openai || new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  const chromaClient = options?.chromaClient || await getChromaClient({});
+  const chromaClient = options?.chromaClient || (await getChromaClient({}));
   const similarityThreshold = options?.similarityThreshold || 0.75;
+  const collectionName = process.env.CHROMA_COLLECTION_NAME || 'stickies_rag_v1';
 
   console.log('🔧 [WORKER] Configuration:');
   console.log('  - OpenAI available:', !!openai);
@@ -187,15 +204,43 @@ export async function runRagPipeline(paragraph: string, options?: {
 
   // Step 2: Retrieve similar content
   console.log('🔍 [WORKER] Step 2: Querying ChromaDB for similar content...');
-  const collection = await chromaClient.getOrCreateCollection({ name: 'stickies_rag_v1' });
-  
-  // Retrieve top k
+  let collection = await chromaClient.getOrCreateCollection({ name: collectionName });
   const k = 5;
   console.log('📊 [WORKER] Querying for top', k, 'similar results');
-  const query = await collection.query({ queryEmbeddings: [embedding], nResults: k });
-  const ids = query.ids[0] as string[];
-  const metas = query.metadatas[0] as any[];
-  const distances = query.distances?.[0] as number[];
+  let queryResult: any;
+  try {
+    queryResult = await collection.query({ queryEmbeddings: [embedding], nResults: k });
+  } catch (error: any) {
+    const msg = (error as Error).message || '';
+    if (msg.includes('dimension')) {
+      console.warn('⚠️  [WORKER] Detected embedding dimension mismatch. Re-indexing collection.');
+      if (typeof chromaClient.deleteCollection === 'function') {
+        await chromaClient.deleteCollection({ name: collectionName });
+      }
+      // Ensure chroma-indexer is available
+      if (!indexStickiesFn) {
+        await loadChromaIndexer();
+      }
+      if (indexStickiesFn) {
+        console.log('🔄 [WORKER] Running indexStickies to rebuild collection...');
+        const defaultStickiesDir =
+          process.env.STICKIES_DIR ||
+          path.join(homedir(), 'Library/Containers/com.apple.Stickies/Data/Library/Stickies');
+        await indexStickiesFn({ client: chromaClient, stickiesDir: defaultStickiesDir });
+        console.log('✅ [WORKER] Re-index completed');
+        collection = await chromaClient.getOrCreateCollection({ name: collectionName });
+        queryResult = await collection.query({ queryEmbeddings: [embedding], nResults: k });
+      } else {
+        throw new Error('Failed to load indexStickies for re-indexing');
+      }
+    } else {
+      throw error;
+    }
+  }
+
+  const ids = queryResult.ids[0] as string[];
+  const metas = queryResult.metadatas[0] as any[];
+  const distances = queryResult.distances?.[0] as number[];
 
   console.log('📋 [WORKER] Retrieved', ids.length, 'potential matches');
   if (distances) {

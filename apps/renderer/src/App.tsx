@@ -83,7 +83,6 @@ function App() {
   const [sections, setSections] = useState<SectionData[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<string>('');
-  const [debugInfo, setDebugInfo] = useState<string>('');
   const [statusText, setStatusText] = useState('Awaiting input...');
   // Track which snippets have expanded full content
   const [expandedSnippets, setExpandedSnippets] = useState<Set<string>>(new Set());
@@ -103,18 +102,9 @@ function App() {
         
         const timestamp = new Date().toLocaleTimeString();
         setLastUpdated(timestamp);
-        setSections((prev) => [newData, ...prev]);
+        setSections([newData]);
         setIsLoading(false);
         setStatusText('Results updated!');
-        
-        // Create debug info
-        const debug = [
-          `🕐 Updated: ${timestamp}`,
-          `📊 Snippets: ${newData.snippets?.length || 0}`,
-          `📄 Summary: ${newData.summary?.length || 0} chars`,
-          `🎯 Top similarity: ${newData.snippets?.[0]?.similarity?.toFixed(3) || 'N/A'}`,
-        ].join(' | ');
-        setDebugInfo(debug);
         
         console.log('✅ [RENDERER] UI state updated successfully');
       });
@@ -126,7 +116,6 @@ function App() {
       console.log('🔄 [RENDERER] RAG pipeline started');
       setIsLoading(true);
       setSections([]);
-      setDebugInfo('');
       setStatusText('Processing your note...');
     });
 
@@ -142,7 +131,7 @@ function App() {
     setIsLoading(true);
     try {
       const result = await window.electronAPI.refreshRequest();
-      setSections((prev) => [result, ...prev]);
+      setSections([result]);
       console.log('✅ [RENDERER] Refresh request sent successfully');
     } catch (error) {
       console.error('❌ [RENDERER] Refresh request failed:', error);
@@ -161,7 +150,6 @@ function App() {
 
   const handleClear = () => {
     setSections([]);
-    setDebugInfo('');
     setStatusText('Cleared');
     setExpandedSnippets(new Set());
     setExpandedSnippetContent(new Set());
@@ -243,12 +231,7 @@ function App() {
           </div>
         )}
 
-        {/* Debug Info */}
-        {debugInfo && (
-          <div className="bg-gray-800 border border-gray-700 rounded p-2">
-            <div className="text-xs text-gray-400 font-mono">{debugInfo}</div>
-          </div>
-        )}
+
 
         {/* Content Area */}
         <div className="space-y-6">
@@ -271,7 +254,7 @@ function App() {
               {section.snippets.length > 0 && (
                 <div className="space-y-3">
                   <h2 className="text-sm font-semibold text-yellow-400 flex items-center gap-2">
-                    🔍 Related Snippets
+                    🔍 Related Snippets from Your Stickies
                     <span className="bg-yellow-400/20 text-yellow-300 px-2 py-0.5 rounded text-xs">
                       {section.snippets.length}
                     </span>
@@ -289,16 +272,10 @@ function App() {
                     
                     return (
                       <div key={snippet.id} className="p-3 bg-white/10 rounded">
-                        <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
-                          <span className="text-xs font-medium text-blue-400 flex items-center gap-1">
+                        <div className="mb-2">
+                          <span className="text-sm font-medium text-blue-400 flex items-center gap-1">
                             📌 {noteTitle}
                           </span>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-gray-500">#{section.snippets.indexOf(snippet) + 1}</span>
-                            <span className="text-xs bg-green-400/20 text-green-300 px-2 py-0.5 rounded">
-                              {(snippet.similarity * 100).toFixed(1)}% match
-                            </span>
-                          </div>
                         </div>
                         
                         {/* Snippet Content */}
@@ -334,12 +311,6 @@ function App() {
                             )}
                           </div>
                         )}
-                        
-                        <div className="mt-2 pt-2 border-t border-gray-700">
-                          <span className="text-xs text-gray-500">
-                            ID: {snippet.id} | Length: {snippet.content.length} chars
-                          </span>
-                        </div>
                       </div>
                     );
                   })}

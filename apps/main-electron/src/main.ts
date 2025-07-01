@@ -10,6 +10,9 @@ import fs from 'fs';
 import { startStickiesWatcher, watcherEvents, setBusy } from './stickiesWatcher';
 import { fork, ChildProcess } from 'child_process';
 import { join as joinPath } from 'path';
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const parseRTF = require('rtf-parser');
+import { promisify } from 'util';
 
 // Load environment variables
 dotenv.config();
@@ -39,16 +42,20 @@ let workerProcess: ChildProcess | null = null;
 let lastParagraph: string | null = null;
 
 // utility to extract plain text quickly
-function extractPlainTextFromRtfFile(rtfFilePath: string): string {
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const parseRtfAsync = promisify(parseRTF.string);
+
+async function extractPlainTextFromRtfFile(rtfFilePath: string): Promise<string> {
   try {
     const raw = fs.readFileSync(rtfFilePath, 'utf8');
-    // Basic stripping: hex encoding
-    let text = raw.replace(/\\'([0-9a-fA-F]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
-    text = text.replace(/\\par[d]?/g, '\n');
-    text = text.replace(/\\[a-zA-Z]+-?\d* ?/g, '');
-    text = text.replace(/[{}]/g, '');
-    text = text.replace(/[ \t\r]+/g, ' ').trim();
-    return text;
+    const doc = await parseRtfAsync(raw);
+    if (!doc || !doc.content) return '';
+    const plain = doc.content
+      .map((para: any) => (para.content || [])
+        .map((span: any) => span.value || '')
+        .join(''))
+      .join('\n\n');
+    return plain.trim();
   } catch {
     return '';
   }
@@ -138,18 +145,18 @@ app.whenReady().then(() => {
     }
     workerProcess = startWorker();
     
-    workerProcess.on('message', (msg: any) => {
+    workerProcess.on('message', async (msg: any) => {
       if (msg?.type === 'result') {
         console.log('🎉 [MAIN] RAG pipeline result received!');
         // Enrich snippets with full note text
         if (msg.result?.snippets) {
-          msg.result.snippets = msg.result.snippets.map((s: any) => {
+          msg.result.snippets = await Promise.all(msg.result.snippets.map(async (s: any) => {
             if (s.filePath) {
-              const noteText = extractPlainTextFromRtfFile(joinPath(s.filePath, 'TXT.rtf'));
+              const noteText = await extractPlainTextFromRtfFile(joinPath(s.filePath, 'TXT.rtf'));
               return { ...s, noteText };
             }
             return s;
-          });
+          }));
         }
         mainWindow?.webContents.send('update-ui', msg.result);
         setBusy(false);

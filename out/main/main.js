@@ -28,6 +28,7 @@ const fs = require("fs");
 const chokidar = require("chokidar");
 const events = require("events");
 const child_process = require("child_process");
+const util = require("util");
 function _interopNamespaceDefault(e) {
   const n = Object.create(null, { [Symbol.toStringTag]: { value: "Module" } });
   if (e) {
@@ -142,6 +143,7 @@ function getLastParagraph(text) {
   const parts = sanitized.split(/\n{2,}/).filter((p) => p.trim().length > 0);
   return parts[parts.length - 1] || text;
 }
+const parseRTF = require("rtf-parser");
 dotenv__namespace.config();
 try {
   if (process.platform === "win32" && require("electron-squirrel-startup")) {
@@ -152,15 +154,14 @@ try {
 let mainWindow = null;
 const statePath = path.join(electron.app.getPath("userData"), "window-state.json");
 let workerProcess = null;
-function extractPlainTextFromRtfFile(rtfFilePath) {
+const parseRtfAsync = util.promisify(parseRTF.string);
+async function extractPlainTextFromRtfFile(rtfFilePath) {
   try {
     const raw = fs.readFileSync(rtfFilePath, "utf8");
-    let text = raw.replace(/\\'([0-9a-fA-F]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
-    text = text.replace(/\\par[d]?/g, "\n");
-    text = text.replace(/\\[a-zA-Z]+-?\d* ?/g, "");
-    text = text.replace(/[{}]/g, "");
-    text = text.replace(/[ \t\r]+/g, " ").trim();
-    return text;
+    const doc = await parseRtfAsync(raw);
+    if (!doc || !doc.content) return "";
+    const plain = doc.content.map((para) => (para.content || []).map((span) => span.value || "").join("")).join("\n\n");
+    return plain.trim();
   } catch {
     return "";
   }
@@ -223,17 +224,17 @@ electron.app.whenReady().then(() => {
       workerProcess.kill();
     }
     workerProcess = startWorker();
-    workerProcess.on("message", (msg) => {
+    workerProcess.on("message", async (msg) => {
       if (msg?.type === "result") {
         console.log("🎉 [MAIN] RAG pipeline result received!");
         if (msg.result?.snippets) {
-          msg.result.snippets = msg.result.snippets.map((s) => {
+          msg.result.snippets = await Promise.all(msg.result.snippets.map(async (s) => {
             if (s.filePath) {
-              const noteText = extractPlainTextFromRtfFile(path.join(s.filePath, "TXT.rtf"));
+              const noteText = await extractPlainTextFromRtfFile(path.join(s.filePath, "TXT.rtf"));
               return { ...s, noteText };
             }
             return s;
-          });
+          }));
         }
         mainWindow?.webContents.send("update-ui", msg.result);
         setBusy(false);

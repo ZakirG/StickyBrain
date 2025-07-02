@@ -379,29 +379,44 @@ export async function indexStickies(opts: IndexOptions = {}) {
 
     // Add title vector for semantic title matching
     const truncatedTitle = stickyTitle.length > 100 ? stickyTitle.slice(0, 100) : stickyTitle;
+    const titleMeta = {
+      filePath: p,
+      stickyTitle: sanitizeForJson(stickyTitle),
+      isTitle: true,
+      preview: sanitizeForJson(fullText.slice(0, 1000)),
+      text: sanitizeForJson(`${truncatedTitle} (title)`),
+    };
+    
+    console.log(`[index] 🏷️  Title metadata for ${fileId}:`, {
+      stickyTitle: titleMeta.stickyTitle.substring(0, 50),
+      text: titleMeta.text.substring(0, 50),
+      preview: titleMeta.preview.substring(0, 50)
+    });
+    
     paragraphs.push({
       id: `${fileId}_title`, // Use unique file ID
       text: `${truncatedTitle} (title)`,
-      meta: {
-        filePath: p,
-        stickyTitle: sanitizeForJson(stickyTitle),
-        isTitle: true,
-        preview: sanitizeForJson(fullText.slice(0, 1000)),
-        text: sanitizeForJson(`${truncatedTitle} (title)`),
-      },
+      meta: titleMeta,
     });
 
     // Add regular paragraph chunks
     chunks.forEach((chunk, idx) => {
+      const chunkMeta = {
+        filePath: p,
+        stickyTitle: sanitizeForJson(stickyTitle),
+        paragraphIndex: idx,
+        text: sanitizeForJson(chunk),
+      };
+      
+      console.log(`[index] 📄 Paragraph ${idx} metadata for ${fileId}:`, {
+        stickyTitle: chunkMeta.stickyTitle.substring(0, 50),
+        text: chunkMeta.text.substring(0, 50)
+      });
+      
       paragraphs.push({
         id: `${fileId}_${idx}`, // Use unique file ID
         text: chunk,
-        meta: {
-          filePath: p,
-          stickyTitle: sanitizeForJson(stickyTitle),
-          paragraphIndex: idx,
-          text: sanitizeForJson(chunk),
-        },
+        meta: chunkMeta,
       });
     });
   });

@@ -64,76 +64,50 @@ async function extractPlainTextFromRtfFile(rtfFilePath: string): Promise<string>
 async function cleanSnippetText(raw: string): Promise<string> {
   let text = raw;
   
-  // Always do aggressive cleaning for snippets since RTF parsing doesn't remove artifacts
-  try {
-    // Try parsing as RTF first to get plain text
-    const doc = await parseRtfAsync(raw);
-          if (doc && doc.content) {
+  console.log('🧹 [MAIN] Input to cleanSnippetText:', JSON.stringify(text.substring(0, 100)));
+  
+  // Check if this looks like RTF content (starts with {\rtf or contains RTF control words)
+  const isRtfContent = text.startsWith('{\\rtf') || /\\[a-zA-Z]+\d*/.test(text);
+  
+  if (isRtfContent) {
+    console.log('🧹 [MAIN] Detected RTF content, parsing...');
+    // This is RTF content, parse it
+    try {
+      const doc = await parseRtfAsync(raw);
+      if (doc && doc.content) {
         text = doc.content
-        .map((para: any) => (para.content || [])
-          .map((span: any) => span.value || '')
-          .join(''))
-        .join('\n');
-      console.log('\n\n\n>> got RTF parsed content, now doing aggressive cleaning');
+          .map((para: any) => (para.content || [])
+            .map((span: any) => span.value || '')
+            .join(''))
+          .join('\n');
+        console.log('🧹 [MAIN] RTF parsed successfully');
+      }
+    } catch (error) {
+      console.log('🧹 [MAIN] RTF parsing failed, using raw content');
+      // If RTF parsing fails, use raw content
     }
-  } catch {
-    console.log('\n\n\n>> RTF parsing failed, using raw content for aggressive cleaning');
-    // If RTF parsing fails, use raw content for aggressive cleaning
+  } else {
+    console.log('🧹 [MAIN] Plain text content detected, skipping RTF parsing');
+    // This is already plain text from the vector database, no RTF parsing needed
   }
   
-  // Continue with aggressive RTF artifact removal using the text we have
+  // Light cleaning for display (remove any remaining artifacts)
   let cleaned = text;
   
-  // Remove specific RTF artifacts first (before other processing)
-  cleaned = cleaned.replace(/irnaturaltightenfactor0(?:HYPERLINK)?/g, '');
-  cleaned = cleaned.replace("irnatural", '');
-  cleaned = cleaned.replace("tightenfactor0", '');
-  cleaned = cleaned.replace(/naturaltightenfactor\d*/g, '');
+  // Remove any hex escape sequences that might have survived
+  cleaned = cleaned.replace(/\\x[0-9a-fA-F]{2}/g, '');
   
-  // Remove hyperlink formatting: \*HYPERLINK "url"url\
-  cleaned = cleaned.replace(/\\\*HYPERLINK\s+"[^"]*"[^\\]*\\/g, '');
-  
-  // Remove other complex RTF controls
-  cleaned = cleaned.replace(/\\\*[^\\]*\\/g, '');
-  
-  // Convert RTF line breaks to actual newlines
-  cleaned = cleaned.replace(/\\\\/g, '\n');
-  cleaned = cleaned.replace(/\\par\b/g, '\n');
-  cleaned = cleaned.replace(/\\line\b/g, '\n');
-  
-  // Remove hex-encoded characters
-  cleaned = cleaned.replace(/\\'(?:[0-9a-fA-F]{2})/g, '');
-  
-  // Remove RTF control words (like \tightenfactor0)
+  // Remove any remaining backslash sequences
   cleaned = cleaned.replace(/\\[a-zA-Z]+\d*/g, '');
-  
-  // Remove any remaining single backslashes
   cleaned = cleaned.replace(/\\/g, '');
   
   // Remove braces
   cleaned = cleaned.replace(/[{}]/g, '');
   
-  // Clean up multiple consecutive newlines (keep max 2)
-  cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+  // Clean up whitespace
+  cleaned = cleaned.replace(/\s+/g, ' ').trim();
   
-  // Clean up whitespace but preserve newlines
-  cleaned = cleaned.replace(/[ \t]+/g, ' '); // collapse spaces and tabs
-  cleaned = cleaned.replace(/ {2,}/g, ' '); // replace 2+ spaces with single space
-  cleaned = cleaned.replace(/\n\s+/g, '\n'); // clean up whitespace after newlines
-  cleaned = cleaned.replace(/\s+\n/g, '\n'); // clean up whitespace before newlines
-  
-  // Remove any leading/trailing whitespace
-  cleaned = cleaned.trim();
-  
-  // Remove any remaining artifacts at the beginning
-  cleaned = cleaned.replace(/^[^a-zA-Z0-9\n]*/, '');
-  
-  // Normalize curly quotes and weird CP1252 apostrophes to straight ASCII equivalents
-  cleaned = cleaned
-    .replace(/[\u2018\u2019\u201A\u0091\u0092]/g, "'") // single quotes
-    .replace(/[\u201C\u201D\u201E\u0093\u0094]/g, '"');
-  
-  console.log('🧹 [MAIN] Cleaned snippet content:', JSON.stringify(cleaned));
+  console.log('🧹 [MAIN] Cleaned snippet content:', JSON.stringify(cleaned.substring(0, 100)));
   return cleaned;
 }
 

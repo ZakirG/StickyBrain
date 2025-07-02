@@ -303,6 +303,12 @@ async function retrieveNode(state: RagState): Promise<Partial<RagState>> {
     const dist = distances ? distances[idx] : 'N/A';
     const preview = (meta.text || '').substring(0, 120).replace(/\n/g, ' ');
     console.log(`🔎 [RETRIEVE NODE] Raw result ${idx + 1}: id=${id}, dist=${typeof dist === 'number' ? dist.toFixed(3) : dist}, stickyTitle=${meta.stickyTitle || 'N/A'}, preview="${preview}"`);
+    console.log(`🔍 [RETRIEVE NODE] Full metadata for result ${idx + 1}:`, {
+      isTitle: meta.isTitle,
+      text: meta.text ? meta.text.substring(0, 100) : 'NO TEXT',
+      preview: meta.preview ? meta.preview.substring(0, 100) : 'NO PREVIEW',
+      stickyTitle: meta.stickyTitle || 'NO TITLE'
+    });
   });
 
   return {
@@ -336,6 +342,13 @@ async function filterNode(state: RagState): Promise<Partial<RagState>> {
       const content = isTitleVector
         ? state.retrievedMetas[i]?.preview ?? state.retrievedMetas[i]?.text
         : state.retrievedMetas[i]?.text;
+      
+      console.log(`📝 [FILTER NODE] Content selected for result ${i + 1}:`, {
+        isTitle: isTitleVector,
+        selectedContent: content ? content.substring(0, 100) : 'NO CONTENT',
+        availablePreview: state.retrievedMetas[i]?.preview ? state.retrievedMetas[i].preview.substring(0, 50) : 'NO PREVIEW',
+        availableText: state.retrievedMetas[i]?.text ? state.retrievedMetas[i].text.substring(0, 50) : 'NO TEXT'
+      });
       
       filteredSnippets.push({
         id: state.retrievedIds[i],

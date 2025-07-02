@@ -168,38 +168,29 @@ async function extractPlainTextFromRtfFile(rtfFilePath) {
 }
 async function cleanSnippetText(raw) {
   let text = raw;
-  try {
-    const doc = await parseRtfAsync(raw);
-    if (doc && doc.content) {
-      text = doc.content.map((para) => (para.content || []).map((span) => span.value || "").join("")).join("\n");
-      console.log("\n\n\n>> got RTF parsed content, now doing aggressive cleaning");
+  console.log("🧹 [MAIN] Input to cleanSnippetText:", JSON.stringify(text.substring(0, 100)));
+  const isRtfContent = text.startsWith("{\\rtf") || /\\[a-zA-Z]+\d*/.test(text);
+  if (isRtfContent) {
+    console.log("🧹 [MAIN] Detected RTF content, parsing...");
+    try {
+      const doc = await parseRtfAsync(raw);
+      if (doc && doc.content) {
+        text = doc.content.map((para) => (para.content || []).map((span) => span.value || "").join("")).join("\n");
+        console.log("🧹 [MAIN] RTF parsed successfully");
+      }
+    } catch (error) {
+      console.log("🧹 [MAIN] RTF parsing failed, using raw content");
     }
-  } catch {
-    console.log("\n\n\n>> RTF parsing failed, using raw content for aggressive cleaning");
+  } else {
+    console.log("🧹 [MAIN] Plain text content detected, skipping RTF parsing");
   }
   let cleaned = text;
-  cleaned = cleaned.replace(/irnaturaltightenfactor0(?:HYPERLINK)?/g, "");
-  cleaned = cleaned.replace("irnatural", "");
-  cleaned = cleaned.replace("tightenfactor0", "");
-  cleaned = cleaned.replace(/naturaltightenfactor\d*/g, "");
-  cleaned = cleaned.replace(/\\\*HYPERLINK\s+"[^"]*"[^\\]*\\/g, "");
-  cleaned = cleaned.replace(/\\\*[^\\]*\\/g, "");
-  cleaned = cleaned.replace(/\\\\/g, "\n");
-  cleaned = cleaned.replace(/\\par\b/g, "\n");
-  cleaned = cleaned.replace(/\\line\b/g, "\n");
-  cleaned = cleaned.replace(/\\'(?:[0-9a-fA-F]{2})/g, "");
+  cleaned = cleaned.replace(/\\x[0-9a-fA-F]{2}/g, "");
   cleaned = cleaned.replace(/\\[a-zA-Z]+\d*/g, "");
   cleaned = cleaned.replace(/\\/g, "");
   cleaned = cleaned.replace(/[{}]/g, "");
-  cleaned = cleaned.replace(/\n{3,}/g, "\n\n");
-  cleaned = cleaned.replace(/[ \t]+/g, " ");
-  cleaned = cleaned.replace(/ {2,}/g, " ");
-  cleaned = cleaned.replace(/\n\s+/g, "\n");
-  cleaned = cleaned.replace(/\s+\n/g, "\n");
-  cleaned = cleaned.trim();
-  cleaned = cleaned.replace(/^[^a-zA-Z0-9\n]*/, "");
-  cleaned = cleaned.replace(/[\u2018\u2019\u201A\u0091\u0092]/g, "'").replace(/[\u201C\u201D\u201E\u0093\u0094]/g, '"');
-  console.log("🧹 [MAIN] Cleaned snippet content:", JSON.stringify(cleaned));
+  cleaned = cleaned.replace(/\s+/g, " ").trim();
+  console.log("🧹 [MAIN] Cleaned snippet content:", JSON.stringify(cleaned.substring(0, 100)));
   return cleaned;
 }
 const createFloatingWindow = () => {

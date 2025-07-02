@@ -60,19 +60,19 @@ function extractPreview(text: string): string {
   const sentences = text.match(/[^.!?]*[.!?]+/g) || [];
   
   if (sentences.length === 0) {
-    // If no sentence endings found, take first 150 characters
-    return text.length > 150 ? text.substring(0, 147) + '...' : text;
+    // If no sentence endings found, take first 300 characters (doubled from 150)
+    return text.length > 300 ? text.substring(0, 297) + '...' : text;
   }
   
   // Take first 2-3 sentences, but limit total length
   let preview = sentences.slice(0, 3).join(' ').trim();
   
-  if (preview.length > 200) {
+  if (preview.length > 400) {
     preview = sentences.slice(0, 2).join(' ').trim();
   }
   
-  if (preview.length > 200) {
-    preview = preview.substring(0, 197) + '...';
+  if (preview.length > 400) {
+    preview = preview.substring(0, 397) + '...';
   }
   
   return preview + (preview === text.trim() ? '' : '...');
@@ -244,6 +244,7 @@ function App() {
                   ⚡ Summary of Related Snippets from Your Old Stickies
                     <span className="text-xs text-gray-500">({section.summary.length} chars)</span>
                   </h2>
+                  <hr className="border-gray-600 mb-3 -mx-3" />
                   <p 
                     className="text-sm text-gray-300 leading-relaxed break-words whitespace-pre-line"
                     dangerouslySetInnerHTML={{ __html: formatBoldText(section.summary) }}
@@ -271,16 +272,22 @@ function App() {
                     const shouldShowFullContentToggle = snippet.noteText && snippet.noteText.length > fullContentPreview.length;
                     
                     return (
-                      <div key={snippet.id} className="p-3 bg-white/10 rounded">
+                      <div key={snippet.id} className="p-3 bg-white/10 border border-gray-600/30 rounded">
                         <div className="mb-2">
                           <span className="text-sm font-medium text-blue-400 flex items-center gap-1">
-                            📌 {noteTitle}
+                            🏴‍☠️ Sticky: "{noteTitle}""
                           </span>
                         </div>
+                        <hr className="border-gray-600 mb-3 -mx-3" />
                         
                         {/* Snippet Content */}
                         <div className="mb-3">
-                          <h4 className="text-xs font-medium text-gray-400 mb-1">Snippet Text</h4>
+                          <button
+                            onClick={() => toggleSnippetContentExpansion(snippet.id)}
+                            className="text-xs font-medium text-gray-400 hover:text-gray-300 mb-1 flex items-center gap-1"
+                          >
+                            {isSnippetContentExpanded ? '▼' : '▶'} Snippet Text
+                          </button>
                           <div className="p-2 bg-gray-800/60 rounded text-xs whitespace-pre-line">
                             {isSnippetContentExpanded ? snippet.content : snippetPreview}
                           </div>
@@ -289,14 +296,14 @@ function App() {
                               onClick={() => toggleSnippetContentExpansion(snippet.id)}
                               className="text-xs text-yellow-400 hover:text-yellow-300 flex items-center gap-1 mt-1"
                             >
-                              {isSnippetContentExpanded ? '▼' : '▶'} {isSnippetContentExpanded ? 'Show Less' : 'Show More'}
+                              {isSnippetContentExpanded ? '▲' : '▶'} {isSnippetContentExpanded ? 'Show Less' : 'Show More'}
                             </button>
                           )}
                         </div>
                         
-                        {/* Full Sticky Content */}
+                        {/* Full Sticky Content - Hidden for now */}
                         {snippet.noteText && (
-                          <div className="mt-3">
+                          <div className="mt-3 hidden">
                             <h4 className="text-xs font-medium text-gray-400 mb-1">Full Sticky Content</h4>
                             <div className="p-2 bg-gray-800/60 rounded text-xs whitespace-pre-line">
                               {isFullContentExpanded ? snippet.noteText : fullContentPreview}

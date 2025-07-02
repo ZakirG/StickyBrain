@@ -277,7 +277,23 @@ export async function indexStickies(opts: IndexOptions = {}) {
     const plain = extractTextFromRtfd(p);
     const chunks = splitIntoParagraphs(plain.text);
     const stickyTitle = plain.title;
+    const fullText = plain.text;
 
+    // Add title vector for semantic title matching
+    const truncatedTitle = stickyTitle.length > 100 ? stickyTitle.slice(0, 100) : stickyTitle;
+    paragraphs.push({
+      id: `${stickyTitle}_title`,
+      text: `${truncatedTitle} (title)`,
+      meta: {
+        filePath: p,
+        stickyTitle,
+        isTitle: true,
+        preview: fullText.slice(0, 1000),
+        text: `${truncatedTitle} (title)`,
+      },
+    });
+
+    // Add regular paragraph chunks
     chunks.forEach((chunk, idx) => {
       paragraphs.push({
         id: `${stickyTitle}_${idx}`,
@@ -292,7 +308,7 @@ export async function indexStickies(opts: IndexOptions = {}) {
     });
   });
 
-  console.log(`[index] Total paragraphs: ${paragraphs.length}`);
+  console.log(`[index] Total paragraphs (including ${rtfdPaths.length} title vectors): ${paragraphs.length}`);
 
   // Debug: print first 5 paragraphs for verification
   paragraphs.slice(0, 5).forEach((p, idx) => {

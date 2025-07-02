@@ -167,15 +167,21 @@ async function extractPlainTextFromRtfFile(rtfFilePath) {
   }
 }
 async function cleanSnippetText(raw) {
+  let text = raw;
   try {
     const doc = await parseRtfAsync(raw);
     if (doc && doc.content) {
-      const plain = doc.content.map((para) => (para.content || []).map((span) => span.value || "").join("")).join("\n");
-      return plain.trim();
+      text = doc.content.map((para) => (para.content || []).map((span) => span.value || "").join("")).join("\n");
+      console.log("\n\n\n>> got RTF parsed content, now doing aggressive cleaning");
     }
   } catch {
+    console.log("\n\n\n>> RTF parsing failed, using raw content for aggressive cleaning");
   }
-  let cleaned = raw;
+  let cleaned = text;
+  cleaned = cleaned.replace(/irnaturaltightenfactor0(?:HYPERLINK)?/g, "");
+  cleaned = cleaned.replace("irnatural", "");
+  cleaned = cleaned.replace("tightenfactor0", "");
+  cleaned = cleaned.replace(/naturaltightenfactor\d*/g, "");
   cleaned = cleaned.replace(/\\\*HYPERLINK\s+"[^"]*"[^\\]*\\/g, "");
   cleaned = cleaned.replace(/\\\*[^\\]*\\/g, "");
   cleaned = cleaned.replace(/\\\\/g, "\n");

@@ -62,23 +62,33 @@ async function extractPlainTextFromRtfFile(rtfFilePath: string): Promise<string>
 }
 
 async function cleanSnippetText(raw: string): Promise<string> {
+  let text = raw;
+  
+  // Always do aggressive cleaning for snippets since RTF parsing doesn't remove artifacts
   try {
-    // Try parsing as RTF first
+    // Try parsing as RTF first to get plain text
     const doc = await parseRtfAsync(raw);
-    if (doc && doc.content) {
-      const plain = doc.content
+          if (doc && doc.content) {
+        text = doc.content
         .map((para: any) => (para.content || [])
           .map((span: any) => span.value || '')
           .join(''))
         .join('\n');
-      return plain.trim();
+      console.log('\n\n\n>> got RTF parsed content, now doing aggressive cleaning');
     }
   } catch {
-    // If RTF parsing fails, fall back to aggressive cleaning
+    console.log('\n\n\n>> RTF parsing failed, using raw content for aggressive cleaning');
+    // If RTF parsing fails, use raw content for aggressive cleaning
   }
   
-  // Fallback: aggressive RTF artifact removal
-  let cleaned = raw;
+  // Continue with aggressive RTF artifact removal using the text we have
+  let cleaned = text;
+  
+  // Remove specific RTF artifacts first (before other processing)
+  cleaned = cleaned.replace(/irnaturaltightenfactor0(?:HYPERLINK)?/g, '');
+  cleaned = cleaned.replace("irnatural", '');
+  cleaned = cleaned.replace("tightenfactor0", '');
+  cleaned = cleaned.replace(/naturaltightenfactor\d*/g, '');
   
   // Remove hyperlink formatting: \*HYPERLINK "url"url\
   cleaned = cleaned.replace(/\\\*HYPERLINK\s+"[^"]*"[^\\]*\\/g, '');

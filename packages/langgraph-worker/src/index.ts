@@ -255,7 +255,7 @@ async function retrieveNode(state: RagState): Promise<Partial<RagState>> {
     }
   }
 
-  const k = 5;
+  const k = 8;
   console.log('📊 [RETRIEVE NODE] Querying for top', k, 'similar results');
   let queryResult: any;
   try {
@@ -321,14 +321,26 @@ async function filterNode(state: RagState): Promise<Partial<RagState>> {
   const filteredSnippets: Snippet[] = [];
   for (let i = 0; i < state.retrievedIds.length; i++) {
     const similarity = state.retrievedDistances.length > 0 ? 1 / (1 + state.retrievedDistances[i]) : 0.5; // Convert distance to similarity (0-1)
-    console.log(`📌 [FILTER NODE] Result ${i + 1}: similarity=${similarity.toFixed(3)}, threshold=${state.similarityThreshold}`);
+    const isTitleVector = state.retrievedMetas[i]?.isTitle === true;
     
-    if (similarity >= state.similarityThreshold) {
-      console.log(`✅ [FILTER NODE] Including result ${i + 1} (similarity: ${similarity.toFixed(3)})`);
+    console.log(`📌 [FILTER NODE] Result ${i + 1}: similarity=${similarity.toFixed(3)}, threshold=${state.similarityThreshold}, isTitle=${isTitleVector}`);
+    
+    // Include if passes similarity threshold OR is a title vector
+    const passesSimilarity = similarity >= state.similarityThreshold;
+    const passesTitleClause = isTitleVector;
+    
+    if (passesSimilarity || passesTitleClause) {
+      console.log(`✅ [FILTER NODE] Including result ${i + 1} (similarity: ${similarity.toFixed(3)}, isTitle: ${isTitleVector})`);
+      
+      // Use preview content for title vectors, regular text for paragraph chunks
+      const content = isTitleVector
+        ? state.retrievedMetas[i]?.preview ?? state.retrievedMetas[i]?.text
+        : state.retrievedMetas[i]?.text;
+      
       filteredSnippets.push({
         id: state.retrievedIds[i],
         stickyTitle: state.retrievedMetas[i]?.stickyTitle || 'Unknown',
-        content: state.retrievedMetas[i]?.text || 'No content',
+        content: content || 'No content',
         similarity: parseFloat(similarity.toFixed(3)),
         filePath: state.retrievedMetas[i]?.filePath,
       });

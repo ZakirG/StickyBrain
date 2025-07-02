@@ -24,16 +24,24 @@ test('RAG pipeline with mocked OpenAI and in-memory Chroma using LangGraph', asy
   const chromaClient = new InMemoryChromaClient();
   const collection = await chromaClient.getOrCreateCollection({ name: 'stickies_rag_v1' });
 
-  // Insert two fake embeddings with high similarity to mock query
+  // Insert test embeddings including title vectors
   await collection.upsert({
-    ids: ['test1', 'test2'],
+    ids: ['test1', 'test2', 'app_ideas_title'],
     embeddings: [
       [0.1, 0.2, 0.3, 0.4, 0.5], // exact match
       [0.15, 0.25, 0.35, 0.45, 0.55], // similar
+      [0.12, 0.22, 0.32, 0.42, 0.52], // title vector - very similar to query
     ],
     metadatas: [
       { stickyTitle: 'Test Note 1', text: 'First test content', filePath: '/test1.rtfd' },
       { stickyTitle: 'Test Note 2', text: 'Second test content', filePath: '/test2.rtfd' },
+      { 
+        stickyTitle: 'App Ideas', 
+        text: 'App Ideas (title)', 
+        isTitle: true,
+        preview: 'Social media app for pet owners. A marketplace for local services. Fitness tracking app with AI coaching.',
+        filePath: '/app_ideas.rtfd' 
+      },
     ],
   });
 
@@ -45,9 +53,14 @@ test('RAG pipeline with mocked OpenAI and in-memory Chroma using LangGraph', asy
   });
 
   // Assertions
-  expect(result.snippets.length).toBe(2);
+  expect(result.snippets.length).toBe(3); // Now expecting 3 results including title vector
   expect(result.summary.split('.').length - 1).toBeLessThanOrEqual(3);
   expect(result.summary).toBe('Mock summary from LangGraph nodes.');
+
+  // Verify that title vector is included
+  const titleSnippet = result.snippets.find(s => s.id === 'app_ideas_title');
+  expect(titleSnippet).toBeDefined();
+  expect(titleSnippet?.content).toContain('Social media app for pet owners');
 
   // Verify snippets structure
   expect(result.snippets[0]).toMatchObject({

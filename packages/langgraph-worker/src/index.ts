@@ -1,6 +1,6 @@
 /**
  * LangGraph Worker - RAG Pipeline
- * Handles embedding, retrieval, filtering, and summarization
+ * Handles embedding, retrieval, filtering, and summarization using LangGraph StateGraph
  */
 
 import * as dotenv from 'dotenv';
@@ -8,6 +8,8 @@ import OpenAI from 'openai';
 import { ChromaClient, ChromaClientParams } from 'chromadb';
 import * as path from 'path';
 import { homedir } from 'os';
+import { StateGraph, MessagesAnnotation, Annotation } from '@langchain/langgraph';
+import { BaseMessage, HumanMessage } from '@langchain/core/messages';
 
 // Import chroma client fallback
 let InMemoryChromaClient: any;
@@ -131,16 +133,34 @@ interface PipelineOptions {
   similarityThreshold?: number;
 }
 
-interface PipelineState {
-  paragraphText: string;
-  embedding?: number[];
-  retrievedIds?: string[];
-  retrievedMetas?: any[];
-  retrievedEmbeddings?: number[][];
-  similarities?: number[];
-  filteredSnippets?: Snippet[];
-  summary?: string;
-}
+/**
+ * LangGraph State Interface
+ * Defines the state that flows between nodes in the graph
+ */
+const RagStateAnnotation = Annotation.Root({
+  // Input
+  paragraphText: Annotation<string>,
+  
+  // Configuration
+  openai: Annotation<OpenAI>,
+  chromaClient: Annotation<any>,
+  similarityThreshold: Annotation<number>,
+  
+  // Intermediate state
+  embedding: Annotation<number[]>,
+  retrievedIds: Annotation<string[]>,
+  retrievedMetas: Annotation<any[]>,
+  retrievedDistances: Annotation<number[]>,
+  
+  // Filtered results
+  filteredSnippets: Annotation<Snippet[]>,
+  
+  // Final output
+  summary: Annotation<string>,
+  result: Annotation<PipelineResult>,
+});
+
+type RagState = typeof RagStateAnnotation.State;
 
 async function getChromaClient(opts: PipelineOptions): Promise<any> {
   if (opts.chromaClient) return opts.chromaClient;
@@ -169,10 +189,204 @@ function getOpenAI(opts: PipelineOptions): OpenAI | undefined {
 }
 
 /**
+ * InputNode - Initializes the state with input paragraph and configuration
+ */
+async function inputNode(state: RagState): Promise<Partial<RagState>> {
+  console.log('🚀 [INPUT NODE] Processing input paragraph');
+  console.log('📝 [INPUT NODE] Input paragraph:', state.paragraphText.substring(0, 100) + '...');
+  console.log('📏 [INPUT NODE] Input length:', state.paragraphText.length, 'characters');
+  
+  // Ensure chroma-indexer is loaded
+  if (!InMemoryChromaClient) {
+    await loadChromaIndexer();
+  }
+
+  return {
+    // State is already populated by the graph initialization
+  };
+}
+
+/**
+ * EmbedNode - Generates embedding for the input paragraph
+ */
+async function embedNode(state: RagState): Promise<Partial<RagState>> {
+  console.log('🧠 [EMBED NODE] Generating embedding...');
+  
+  const embedding = await generateEmbedding(state.paragraphText, state.openai);
+  console.log('✅ [EMBED NODE] Embedding generated, dimensions:', embedding.length);
+  
+  return {
+    embedding,
+  };
+}
+
+/**
+ * RetrieveNode - Queries ChromaDB for similar content
+ */
+async function retrieveNode(state: RagState): Promise<Partial<RagState>> {
+  console.log('🔍 [RETRIEVE NODE] Querying ChromaDB for similar content...');
+  
+  const collectionName = process.env.CHROMA_COLLECTION_NAME || 'stickies_rag_v1';
+  let collection = await state.chromaClient.getOrCreateCollection({ name: collectionName });
+
+  // Debug: print collection stats and first few items
+  if (typeof collection.count === 'function') {
+    try {
+      const total = await collection.count();
+      console.log(`[RETRIEVE NODE] Collection contains ${total} vectors`);
+    } catch (err) {
+      console.warn('[RETRIEVE NODE] Could not count collection size:', (err as Error).message);
+    }
+  }
+
+  if (typeof collection.get === 'function') {
+    try {
+      // Many client versions accept { limit, include }
+      const previewRes: any = await collection.get({ limit: 5, include: ['metadatas', 'ids'] });
+      const idsPreview = previewRes.ids?.[0] || previewRes.ids || [];
+      const metaPreview = previewRes.metadatas?.[0] || previewRes.metadatas || [];
+      console.log('[RETRIEVE NODE] Preview of first 5 vectors:');
+      idsPreview.slice(0, 5).forEach((id: string, idx: number) => {
+        const meta = metaPreview[idx] || {};
+        console.log(`  ${idx + 1}. id=${id}, stickyTitle=${meta.stickyTitle || 'N/A'}, textPreview="${(meta.text || '').substring(0, 80)}"`);
+      });
+    } catch (err) {
+      console.warn('[RETRIEVE NODE] Could not fetch preview vectors:', (err as Error).message);
+    }
+  }
+
+  const k = 5;
+  console.log('📊 [RETRIEVE NODE] Querying for top', k, 'similar results');
+  let queryResult: any;
+  try {
+    queryResult = await collection.query({ queryEmbeddings: [state.embedding], nResults: k });
+  } catch (error: any) {
+    const msg = (error as Error).message || '';
+    if (msg.includes('dimension')) {
+      console.warn('⚠️  [RETRIEVE NODE] Detected embedding dimension mismatch. Re-indexing collection.');
+      if (typeof state.chromaClient.deleteCollection === 'function') {
+        await state.chromaClient.deleteCollection({ name: collectionName });
+      }
+      // Ensure chroma-indexer is available
+      if (!indexStickiesFn) {
+        await loadChromaIndexer();
+      }
+      if (indexStickiesFn) {
+        console.log('🔄 [RETRIEVE NODE] Running indexStickies to rebuild collection...');
+        const defaultStickiesDir =
+          process.env.STICKIES_DIR ||
+          path.join(homedir(), 'Library/Containers/com.apple.Stickies/Data/Library/Stickies');
+        await indexStickiesFn({ client: state.chromaClient, stickiesDir: defaultStickiesDir });
+        console.log('✅ [RETRIEVE NODE] Re-index completed');
+        collection = await state.chromaClient.getOrCreateCollection({ name: collectionName });
+        queryResult = await collection.query({ queryEmbeddings: [state.embedding], nResults: k });
+      } else {
+        throw new Error('Failed to load indexStickies for re-indexing');
+      }
+    } else {
+      throw error;
+    }
+  }
+
+  const ids = queryResult.ids[0] as string[];
+  const metas = queryResult.metadatas[0] as any[];
+  const distances = queryResult.distances?.[0] as number[];
+
+  console.log('📋 [RETRIEVE NODE] Retrieved', ids.length, 'potential matches');
+  if (distances) {
+    console.log('📐 [RETRIEVE NODE] Distance range:', Math.min(...distances).toFixed(3), 'to', Math.max(...distances).toFixed(3));
+  }
+
+  // Debug: log each retrieved snippet preview before filtering
+  ids.forEach((id, idx) => {
+    const meta = metas[idx] || {};
+    const dist = distances ? distances[idx] : 'N/A';
+    const preview = (meta.text || '').substring(0, 120).replace(/\n/g, ' ');
+    console.log(`🔎 [RETRIEVE NODE] Raw result ${idx + 1}: id=${id}, dist=${typeof dist === 'number' ? dist.toFixed(3) : dist}, stickyTitle=${meta.stickyTitle || 'N/A'}, preview="${preview}"`);
+  });
+
+  return {
+    retrievedIds: ids,
+    retrievedMetas: metas,
+    retrievedDistances: distances || [],
+  };
+}
+
+/**
+ * FilterNode - Filters results by similarity threshold
+ */
+async function filterNode(state: RagState): Promise<Partial<RagState>> {
+  console.log('🔬 [FILTER NODE] Filtering by similarity threshold...');
+  
+  const filteredSnippets: Snippet[] = [];
+  for (let i = 0; i < state.retrievedIds.length; i++) {
+    const similarity = state.retrievedDistances.length > 0 ? 1 / (1 + state.retrievedDistances[i]) : 0.5; // Convert distance to similarity (0-1)
+    console.log(`📌 [FILTER NODE] Result ${i + 1}: similarity=${similarity.toFixed(3)}, threshold=${state.similarityThreshold}`);
+    
+    if (similarity >= state.similarityThreshold) {
+      console.log(`✅ [FILTER NODE] Including result ${i + 1} (similarity: ${similarity.toFixed(3)})`);
+      filteredSnippets.push({
+        id: state.retrievedIds[i],
+        stickyTitle: state.retrievedMetas[i]?.stickyTitle || 'Unknown',
+        content: state.retrievedMetas[i]?.text || 'No content',
+        similarity: parseFloat(similarity.toFixed(3)),
+        filePath: state.retrievedMetas[i]?.filePath,
+      });
+    } else {
+      console.log(`❌ [FILTER NODE] Excluding result ${i + 1} (similarity: ${similarity.toFixed(3)} < ${state.similarityThreshold})`);
+    }
+  }
+
+  console.log('📊 [FILTER NODE] Filtered results:', filteredSnippets.length, 'of', state.retrievedIds.length, 'passed threshold');
+
+  return {
+    filteredSnippets,
+  };
+}
+
+/**
+ * SummariseNode - Generates AI summary of the filtered snippets
+ */
+async function summariseNode(state: RagState): Promise<Partial<RagState>> {
+  console.log('📝 [SUMMARISE NODE] Generating AI summary...');
+  
+  const summary = await generateSummary(state.paragraphText, state.filteredSnippets, state.openai);
+  console.log('✅ [SUMMARISE NODE] Summary generated, length:', summary.length, 'characters');
+  console.log('📄 [SUMMARISE NODE] Summary preview:', summary.substring(0, 100) + '...');
+
+  return {
+    summary,
+  };
+}
+
+/**
+ * OutputNode - Prepares final result
+ */
+async function outputNode(state: RagState): Promise<Partial<RagState>> {
+  console.log('🎉 [OUTPUT NODE] Preparing final result...');
+  
+  const result: PipelineResult = {
+    snippets: state.filteredSnippets,
+    summary: state.summary,
+  };
+
+  console.log('📊 [OUTPUT NODE] Final results:');
+  console.log('  - Snippets:', result.snippets.length);
+  console.log('  - Summary length:', result.summary.length);
+
+  return {
+    result,
+  };
+}
+
+/**
  * Generate embedding for text using OpenAI or fallback
  */
 async function generateEmbedding(text: string, openai: OpenAI): Promise<number[]> {
-  if (process.env.OPENAI_API_KEY && process.env.NODE_ENV !== 'test') {
+  // Use OpenAI if we have an API key OR if we're in test mode with a mocked instance
+  const shouldUseOpenAI = process.env.OPENAI_API_KEY || process.env.NODE_ENV === 'test';
+  
+  if (shouldUseOpenAI) {
     try {
       const response = await openai.embeddings.create({
         model: 'text-embedding-3-small',
@@ -197,7 +411,10 @@ async function generateEmbedding(text: string, openai: OpenAI): Promise<number[]
  * Generate summary using OpenAI or fallback
  */
 async function generateSummary(paragraph: string, snippets: Snippet[], openai: OpenAI): Promise<string> {
-  if (process.env.OPENAI_API_KEY && process.env.NODE_ENV !== 'test') {
+  // Use OpenAI if we have an API key OR if we're in test mode with a mocked instance
+  const shouldUseOpenAI = process.env.OPENAI_API_KEY || process.env.NODE_ENV === 'test';
+  
+  if (shouldUseOpenAI) {
     try {
       const contextText = snippets.map(s => `- ${s.stickyTitle}: ${s.content}`).join('\n');
       const prompt = ` You are an assistant in a Mac desktop application. The user is typing in a sticky note. Relevant snippets from their old Sticky notes are being retrieved via RAG and shown to them. You will be summarizing the snippets, starting with the information most valuable to the specific subproblem they are currently solving or the specific subtopic they are currently reflecting on. For example, if the user is trying to brainstorm app ideas, the MOST VALUABLE INFORMATION is SPECIFIC APP IDEAS that they wrote in the retrieved snippets. 
@@ -226,154 +443,66 @@ async function generateSummary(paragraph: string, snippets: Snippet[], openai: O
   return `Summary of paragraph (${paragraph.length} chars) with ${snippets.length} related snippets found.`;
 }
 
-/** Main RAG pipeline */
+/**
+ * Main RAG pipeline using LangGraph StateGraph
+ */
 export async function runRagPipeline(paragraph: string, options?: {
   openai?: OpenAI;
   chromaClient?: any;
   similarityThreshold?: number;
 }): Promise<PipelineResult> {
-  console.log('🚀 [WORKER] Starting RAG pipeline');
-  console.log('📝 [WORKER] Input paragraph:', paragraph.substring(0, 100) + '...');
-  console.log('📏 [WORKER] Input length:', paragraph.length, 'characters');
-
-  // Ensure chroma-indexer is loaded
-  if (!InMemoryChromaClient) {
-    await loadChromaIndexer();
-  }
-
+  console.log('🚀 [WORKER] Starting LangGraph RAG pipeline');
+  
   const openai = options?.openai || new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const chromaClient = options?.chromaClient || (await getChromaClient({}));
   const similarityThreshold = options?.similarityThreshold ?? 0.3;
-  const collectionName = process.env.CHROMA_COLLECTION_NAME || 'stickies_rag_v1';
 
   console.log('🔧 [WORKER] Configuration:');
   console.log('  - OpenAI available:', !!openai);
   console.log('  - ChromaDB client type:', chromaClient.constructor.name);
   console.log('  - Similarity threshold:', similarityThreshold);
 
-  // Step 1: Generate embedding
-  console.log('🧠 [WORKER] Step 1: Generating embedding...');
-  const embedding = await generateEmbedding(paragraph, openai);
-  console.log('✅ [WORKER] Embedding generated, dimensions:', embedding.length);
+  // Create the LangGraph StateGraph
+  const workflow = new StateGraph(RagStateAnnotation)
+    .addNode('input', inputNode)
+    .addNode('embed', embedNode)
+    .addNode('retrieve', retrieveNode)
+    .addNode('filter', filterNode)
+    .addNode('summarise', summariseNode)
+    .addNode('output', outputNode)
+    .addEdge('__start__', 'input')
+    .addEdge('input', 'embed')
+    .addEdge('embed', 'retrieve')
+    .addEdge('retrieve', 'filter')
+    .addEdge('filter', 'summarise')
+    .addEdge('summarise', 'output')
+    .addEdge('output', '__end__');
 
-  // Step 2: Retrieve similar content
-  console.log('🔍 [WORKER] Step 2: Querying ChromaDB for similar content...');
-  let collection = await chromaClient.getOrCreateCollection({ name: collectionName });
+  const app = workflow.compile();
 
-  // Debug: print collection stats and first few items
-  if (typeof collection.count === 'function') {
-    try {
-      const total = await collection.count();
-      console.log(`[WORKER] Collection contains ${total} vectors`);
-    } catch (err) {
-      console.warn('[WORKER] Could not count collection size:', (err as Error).message);
-    }
-  }
-
-  if (typeof collection.get === 'function') {
-    try {
-      // Many client versions accept { limit, include }
-      const previewRes: any = await collection.get({ limit: 5, include: ['metadatas', 'ids'] });
-      const idsPreview = previewRes.ids?.[0] || previewRes.ids || [];
-      const metaPreview = previewRes.metadatas?.[0] || previewRes.metadatas || [];
-      console.log('[WORKER] Preview of first 5 vectors:');
-      idsPreview.slice(0, 5).forEach((id: string, idx: number) => {
-        const meta = metaPreview[idx] || {};
-        console.log(`  ${idx + 1}. id=${id}, stickyTitle=${meta.stickyTitle || 'N/A'}, textPreview="${(meta.text || '').substring(0, 80)}"`);
-      });
-    } catch (err) {
-      console.warn('[WORKER] Could not fetch preview vectors:', (err as Error).message);
-    }
-  }
-
-  const k = 5;
-  console.log('📊 [WORKER] Querying for top', k, 'similar results');
-  let queryResult: any;
-  try {
-    queryResult = await collection.query({ queryEmbeddings: [embedding], nResults: k });
-  } catch (error: any) {
-    const msg = (error as Error).message || '';
-    if (msg.includes('dimension')) {
-      console.warn('⚠️  [WORKER] Detected embedding dimension mismatch. Re-indexing collection.');
-      if (typeof chromaClient.deleteCollection === 'function') {
-        await chromaClient.deleteCollection({ name: collectionName });
-      }
-      // Ensure chroma-indexer is available
-      if (!indexStickiesFn) {
-        await loadChromaIndexer();
-      }
-      if (indexStickiesFn) {
-        console.log('🔄 [WORKER] Running indexStickies to rebuild collection...');
-        const defaultStickiesDir =
-          process.env.STICKIES_DIR ||
-          path.join(homedir(), 'Library/Containers/com.apple.Stickies/Data/Library/Stickies');
-        await indexStickiesFn({ client: chromaClient, stickiesDir: defaultStickiesDir });
-        console.log('✅ [WORKER] Re-index completed');
-        collection = await chromaClient.getOrCreateCollection({ name: collectionName });
-        queryResult = await collection.query({ queryEmbeddings: [embedding], nResults: k });
-      } else {
-        throw new Error('Failed to load indexStickies for re-indexing');
-      }
-    } else {
-      throw error;
-    }
-  }
-
-  const ids = queryResult.ids[0] as string[];
-  const metas = queryResult.metadatas[0] as any[];
-  const distances = queryResult.distances?.[0] as number[];
-
-  console.log('📋 [WORKER] Retrieved', ids.length, 'potential matches');
-  if (distances) {
-    console.log('📐 [WORKER] Distance range:', Math.min(...distances).toFixed(3), 'to', Math.max(...distances).toFixed(3));
-  }
-
-  // Debug: log each retrieved snippet preview before filtering
-  ids.forEach((id, idx) => {
-    const meta = metas[idx] || {};
-    const dist = distances ? distances[idx] : 'N/A';
-    const preview = (meta.text || '').substring(0, 120).replace(/\n/g, ' ');
-    console.log(`🔎 [WORKER] Raw result ${idx + 1}: id=${id}, dist=${typeof dist === 'number' ? dist.toFixed(3) : dist}, stickyTitle=${meta.stickyTitle || 'N/A'}, preview="${preview}"`);
-  });
-
-  // Step 3: Filter by similarity
-  console.log('🔬 [WORKER] Step 3: Filtering by similarity threshold...');
-  const filteredSnippets: Snippet[] = [];
-  for (let i = 0; i < ids.length; i++) {
-    const similarity = distances ? 1 / (1 + distances[i]) : 0.5; // Convert distance to similarity (0-1)
-    console.log(`📌 [WORKER] Result ${i + 1}: similarity=${similarity.toFixed(3)}, threshold=${similarityThreshold}`);
-    
-    if (similarity >= similarityThreshold) {
-      console.log(`✅ [WORKER] Including result ${i + 1} (similarity: ${similarity.toFixed(3)})`);
-      filteredSnippets.push({
-        id: ids[i],
-        stickyTitle: metas[i]?.stickyTitle || 'Unknown',
-        content: metas[i]?.text || 'No content',
-        similarity: parseFloat(similarity.toFixed(3)),
-        filePath: metas[i]?.filePath,
-      });
-    } else {
-      console.log(`❌ [WORKER] Excluding result ${i + 1} (similarity: ${similarity.toFixed(3)} < ${similarityThreshold})`);
-    }
-  }
-
-  console.log('📊 [WORKER] Filtered results:', filteredSnippets.length, 'of', ids.length, 'passed threshold');
-
-  // Step 4: Generate summary
-  console.log('📝 [WORKER] Step 4: Generating AI summary...');
-  const summary = await generateSummary(paragraph, filteredSnippets, openai);
-  console.log('✅ [WORKER] Summary generated, length:', summary.length, 'characters');
-  console.log('📄 [WORKER] Summary preview:', summary.substring(0, 100) + '...');
-
-  console.log('🎉 [WORKER] RAG pipeline completed successfully!');
-  console.log('📊 [WORKER] Final results:');
-  console.log('  - Snippets:', filteredSnippets.length);
-  console.log('  - Summary length:', summary.length);
-
-  return {
-    snippets: filteredSnippets,
-    summary,
+  // Initialize state
+  const initialState: RagState = {
+    paragraphText: paragraph,
+    openai,
+    chromaClient,
+    similarityThreshold,
+    embedding: [],
+    retrievedIds: [],
+    retrievedMetas: [],
+    retrievedDistances: [],
+    filteredSnippets: [],
+    summary: '',
+    result: { snippets: [], summary: '' },
   };
+
+  console.log('🔄 [WORKER] Executing LangGraph workflow...');
+  
+  // Run the graph
+  const finalState = await app.invoke(initialState);
+
+  console.log('🎉 [WORKER] LangGraph RAG pipeline completed successfully!');
+  
+  return finalState.result;
 }
 
 // Worker process mode

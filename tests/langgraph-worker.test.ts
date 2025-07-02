@@ -3,7 +3,7 @@ import { runRagPipeline } from '../packages/langgraph-worker/src/index';
 import { InMemoryChromaClient } from '../packages/chroma-indexer/src/index';
 import OpenAI from 'openai';
 
-test('RAG pipeline with mocked OpenAI and in-memory Chroma', async () => {
+test('RAG pipeline with mocked OpenAI and in-memory Chroma using LangGraph', async () => {
   // Mock OpenAI
   const mockOpenAI = {
     embeddings: {
@@ -14,7 +14,7 @@ test('RAG pipeline with mocked OpenAI and in-memory Chroma', async () => {
     chat: {
       completions: {
         create: vi.fn().mockResolvedValue({
-          choices: [{ message: { content: 'Mock summary.' } }],
+          choices: [{ message: { content: 'Mock summary from LangGraph nodes.' } }],
         }),
       },
     },
@@ -37,7 +37,7 @@ test('RAG pipeline with mocked OpenAI and in-memory Chroma', async () => {
     ],
   });
 
-  // Run pipeline
+  // Run LangGraph pipeline
   const result = await runRagPipeline('test paragraph', {
     openai: mockOpenAI,
     chromaClient,
@@ -47,7 +47,7 @@ test('RAG pipeline with mocked OpenAI and in-memory Chroma', async () => {
   // Assertions
   expect(result.snippets.length).toBe(2);
   expect(result.summary.split('.').length - 1).toBeLessThanOrEqual(3);
-  expect(result.summary).toBe('Mock summary.');
+  expect(result.summary).toBe('Mock summary from LangGraph nodes.');
 
   // Verify snippets structure
   expect(result.snippets[0]).toMatchObject({
@@ -57,16 +57,25 @@ test('RAG pipeline with mocked OpenAI and in-memory Chroma', async () => {
     similarity: expect.any(Number),
   });
 
-  // Verify OpenAI was called
+  // Verify that OpenAI embedding was called
   expect(mockOpenAI.embeddings.create).toHaveBeenCalledWith({
     model: 'text-embedding-3-small',
     input: 'test paragraph',
   });
 
-  expect(mockOpenAI.chat.completions.create).toHaveBeenCalledWith(
-    expect.objectContaining({
-      model: 'gpt-4o-mini',
-      max_tokens: 150,
-    })
-  );
+  // Verify that OpenAI chat completion was called for summarization
+  expect(mockOpenAI.chat.completions.create).toHaveBeenCalledWith({
+    model: 'gpt-4.1-2025-04-14',
+    max_tokens: 512,
+    messages: expect.arrayContaining([
+      { role: 'system', content: 'You are a concise assistant that summarizes text.' },
+      { role: 'user', content: expect.stringContaining('test paragraph') },
+    ]),
+  });
+
+  console.log('✅ LangGraph RAG pipeline test passed!');
+  console.log('📊 Results:', { 
+    snippetsCount: result.snippets.length, 
+    summaryLength: result.summary.length 
+  });
 }); 

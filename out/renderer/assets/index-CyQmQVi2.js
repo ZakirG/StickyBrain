@@ -6966,12 +6966,36 @@ var m = reactDomExports;
   client.createRoot = m.createRoot;
   client.hydrateRoot = m.hydrateRoot;
 }
+function formatBoldText(text) {
+  return text.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
+}
+function extractNoteTitle(noteText) {
+  if (!noteText) return "";
+  const firstLine = noteText.split("\n")[0].trim();
+  return firstLine.length > 50 ? firstLine.substring(0, 47) + "..." : firstLine;
+}
+function extractPreview(text) {
+  if (!text) return "";
+  const sentences = text.match(/[^.!?]*[.!?]+/g) || [];
+  if (sentences.length === 0) {
+    return text.length > 300 ? text.substring(0, 297) + "..." : text;
+  }
+  let preview = sentences.slice(0, 3).join(" ").trim();
+  if (preview.length > 400) {
+    preview = sentences.slice(0, 2).join(" ").trim();
+  }
+  if (preview.length > 400) {
+    preview = preview.substring(0, 397) + "...";
+  }
+  return preview + (preview === text.trim() ? "" : "...");
+}
 function App() {
-  const [data, setData] = reactExports.useState({ snippets: [], summary: "" });
+  const [sections, setSections] = reactExports.useState([]);
   const [isLoading, setIsLoading] = reactExports.useState(false);
   const [lastUpdated, setLastUpdated] = reactExports.useState("");
-  const [debugInfo, setDebugInfo] = reactExports.useState("");
   const [statusText, setStatusText] = reactExports.useState("Awaiting input...");
+  const [expandedSnippets, setExpandedSnippets] = reactExports.useState(/* @__PURE__ */ new Set());
+  const [expandedSnippetContent, setExpandedSnippetContent] = reactExports.useState(/* @__PURE__ */ new Set());
   reactExports.useEffect(() => {
     console.log("🎨 [RENDERER] App component mounted");
     console.log("🔌 [RENDERER] Setting up IPC listeners...");
@@ -6982,41 +7006,19 @@ function App() {
         console.log("📄 [RENDERER] Summary length:", newData.summary?.length || 0);
         const timestamp = (/* @__PURE__ */ new Date()).toLocaleTimeString();
         setLastUpdated(timestamp);
-        setData(newData);
+        setSections([newData]);
         setIsLoading(false);
         setStatusText("Results updated!");
-        const debug = [
-          `🕐 Updated: ${timestamp}`,
-          `📊 Snippets: ${newData.snippets?.length || 0}`,
-          `📄 Summary: ${newData.summary?.length || 0} chars`,
-          `🎯 Top similarity: ${newData.snippets?.[0]?.similarity?.toFixed(3) || "N/A"}`
-        ].join(" | ");
-        setDebugInfo(debug);
         console.log("✅ [RENDERER] UI state updated successfully");
       });
     }
-    const handleBlur = () => {
-      console.log("[renderer] window blur");
-      const el2 = document.getElementById("root-panel");
-      el2?.classList.add("opacity-40");
-      window.electronAPI?.setInactive();
-    };
-    const handleFocus = () => {
-      console.log("[renderer] window focus");
-      document.getElementById("root-panel")?.classList.remove("opacity-40");
-    };
-    window.addEventListener("blur", handleBlur);
-    window.addEventListener("focus", handleFocus);
-    window.electronAPI?.onRagStart(() => {
+    window.electronAPI?.onRagStart?.(() => {
       console.log("🔄 [RENDERER] RAG pipeline started");
       setIsLoading(true);
-      setData({ snippets: [], summary: "" });
-      setDebugInfo("");
+      setSections([]);
       setStatusText("Processing your note...");
     });
     return () => {
-      window.removeEventListener("blur", handleBlur);
-      window.removeEventListener("focus", handleFocus);
     };
   }, []);
   const handleRefresh = async () => {
@@ -7026,7 +7028,7 @@ function App() {
     setIsLoading(true);
     try {
       const result = await window.electronAPI.refreshRequest();
-      setData(result);
+      setSections([result]);
       console.log("✅ [RENDERER] Refresh request sent successfully");
     } catch (error) {
       console.error("❌ [RENDERER] Refresh request failed:", error);
@@ -7034,93 +7036,187 @@ function App() {
       setIsLoading(false);
     }
   };
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "h-screen w-full bg-black/70 backdrop-blur-sm text-white p-4 transition-opacity duration-200 opacity-70 hover:opacity-100 focus:opacity-100", id: "root-panel", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs(
-      "div",
-      {
-        className: "flex items-center justify-between mb-4 select-none",
-        style: { WebkitAppRegion: "drag" },
-        children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-lg font-semibold", children: "StickyBrain" }),
+  const handleRunEmbeddings = async () => {
+    if (!window.electronAPI?.runEmbeddings) return;
+    setStatusText("Reindexing embeddings...");
+    setIsLoading(true);
+    await window.electronAPI.runEmbeddings();
+    setStatusText("Reindex triggered. Waiting for updates...");
+  };
+  const handleClear = () => {
+    setSections([]);
+    setStatusText("Cleared");
+    setExpandedSnippets(/* @__PURE__ */ new Set());
+    setExpandedSnippetContent(/* @__PURE__ */ new Set());
+  };
+  const toggleSnippetExpansion = (snippetId) => {
+    setExpandedSnippets((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(snippetId)) {
+        newSet.delete(snippetId);
+      } else {
+        newSet.add(snippetId);
+      }
+      return newSet;
+    });
+  };
+  const toggleSnippetContentExpansion = (snippetId) => {
+    setExpandedSnippetContent((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(snippetId)) {
+        newSet.delete(snippetId);
+      } else {
+        newSet.add(snippetId);
+      }
+      return newSet;
+    });
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(jsxRuntimeExports.Fragment, { children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: "fixed inset-0 bg-black text-white p-4 overflow-y-auto relative",
+      id: "root-panel",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "h-6 mb-2 select-none", style: { WebkitAppRegion: "drag" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-sm font-semibold", children: "StickyBrain" }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-end gap-2 mb-4", style: { WebkitAppRegion: "no-drag" }, children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             "button",
             {
               onClick: handleRefresh,
               disabled: isLoading,
-              className: "px-3 py-1 bg-white/20 hover:bg-white/30 rounded text-sm transition-colors disabled:opacity-50",
-              style: { WebkitAppRegion: "no-drag" },
+              className: "px-3 py-1 text-xs bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors disabled:opacity-50",
               "data-testid": "refresh-btn",
-              children: isLoading ? "Refreshing..." : "Refresh suggestions"
+              children: isLoading ? "Refreshing..." : "Refresh"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              className: "px-3 py-1 text-xs bg-blue-500 hover:bg-blue-600 text-white rounded disabled:opacity-50",
+              onClick: handleRunEmbeddings,
+              disabled: isLoading,
+              children: "Run Embeddings"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              className: "px-3 py-1 bg-gray-700 hover:bg-gray-400 text-black rounded text-xs transition-colors disabled:opacity-50",
+              onClick: handleClear,
+              disabled: isLoading || sections.length === 0,
+              title: "Clear snippets",
+              children: "🗑"
             }
           )
-        ]
-      }
-    ),
-    debugInfo && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bg-gray-800 border border-gray-700 rounded p-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-xs text-gray-400 font-mono", children: debugInfo }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 overflow-y-auto", children: [
-      isLoading && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "absolute inset-0 bg-gray-900/80 backdrop-blur-sm flex flex-col items-center justify-center", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-2xl animate-spin", children: "🔄" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-lg font-semibold text-blue-300", children: statusText }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-gray-400", children: "Please wait while we analyze your note." })
-      ] }),
-      data.summary && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-gray-800 border border-green-600/30 rounded p-3", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { className: "text-sm font-semibold text-green-400 mb-2 flex items-center gap-2", children: [
-          "📄 AI Summary",
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-xs text-gray-500", children: [
-            "(",
-            data.summary.length,
-            " chars)"
+        ] }),
+        isLoading && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "fixed inset-0 bg-gray-900/80 z-50 flex flex-col items-center justify-center", style: { WebkitAppRegion: "no-drag" }, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-4xl animate-spin", children: "🔄" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-lg font-semibold text-blue-300", children: statusText }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-gray-400", children: "Please wait while we analyze your note." })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
+          sections.map((section, idx) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
+            section.summary && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-gray-800 border border-green-600/30 rounded p-3", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { className: "text-sm font-semibold text-green-400 mb-2 flex items-center gap-2", children: [
+                "⚡ Summary of Related Snippets from Your Old Stickies",
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-xs text-gray-500", children: [
+                  "(",
+                  section.summary.length,
+                  " chars)"
+                ] })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("hr", { className: "border-gray-600 mb-3 -mx-3" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "p",
+                {
+                  className: "text-sm text-gray-300 leading-relaxed break-words whitespace-pre-line",
+                  dangerouslySetInnerHTML: { __html: formatBoldText(section.summary) }
+                }
+              )
+            ] }),
+            section.snippets.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { className: "text-sm font-semibold text-yellow-400 flex items-center gap-2", children: [
+                "🔍 Related Snippets from Your Stickies",
+                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "bg-yellow-400/20 text-yellow-300 px-2 py-0.5 rounded text-xs", children: section.snippets.length })
+              ] }),
+              section.snippets.map((snippet) => {
+                const noteTitle = snippet.noteText ? extractNoteTitle(snippet.noteText) : snippet.stickyTitle;
+                const isFullContentExpanded = expandedSnippets.has(snippet.id);
+                const isSnippetContentExpanded = expandedSnippetContent.has(snippet.id);
+                console.log("🔍 [RENDERER] Raw snippet content:", JSON.stringify(snippet.content));
+                const snippetPreview = extractPreview(snippet.content);
+                console.log("🔍 [RENDERER] Processed snippet preview:", JSON.stringify(snippetPreview));
+                const shouldShowSnippetToggle = snippet.content.length > snippetPreview.length;
+                const fullContentPreview = snippet.noteText ? extractPreview(snippet.noteText) : "";
+                const shouldShowFullContentToggle = snippet.noteText && snippet.noteText.length > fullContentPreview.length;
+                return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "p-3 bg-white/10 border border-gray-600/30 rounded", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mb-2", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-sm font-medium text-blue-400 flex items-center gap-1", children: [
+                    '🏴‍☠️ Sticky: "',
+                    noteTitle,
+                    '""'
+                  ] }) }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("hr", { className: "border-gray-600 mb-3 -mx-3" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-3", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                      "button",
+                      {
+                        onClick: () => toggleSnippetContentExpansion(snippet.id),
+                        className: "text-xs font-medium text-gray-400 hover:text-gray-300 mb-1 flex items-center gap-1",
+                        children: [
+                          isSnippetContentExpanded ? "▼" : "▶",
+                          " Snippet Text"
+                        ]
+                      }
+                    ),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "p-2 bg-gray-800/60 rounded text-xs whitespace-pre-line", children: (() => {
+                      const displayContent = isSnippetContentExpanded ? snippet.content : snippetPreview;
+                      console.log("🖥️ [RENDERER] Content being displayed:", JSON.stringify(displayContent));
+                      console.log("🖥️ [RENDERER] Content char codes:", displayContent.split("").map((c) => c.charCodeAt(0)).join(","));
+                      return displayContent;
+                    })() }),
+                    shouldShowSnippetToggle && /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                      "button",
+                      {
+                        onClick: () => toggleSnippetContentExpansion(snippet.id),
+                        className: "text-xs text-yellow-400 hover:text-yellow-300 flex items-center gap-1 mt-1",
+                        children: [
+                          isSnippetContentExpanded ? "▲" : "▶",
+                          " ",
+                          isSnippetContentExpanded ? "Show Less" : "Show More"
+                        ]
+                      }
+                    )
+                  ] }),
+                  snippet.noteText && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 hidden", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "text-xs font-medium text-gray-400 mb-1", children: "Full Sticky Content" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "p-2 bg-gray-800/60 rounded text-xs whitespace-pre-line", children: isFullContentExpanded ? snippet.noteText : fullContentPreview }),
+                    shouldShowFullContentToggle && /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                      "button",
+                      {
+                        onClick: () => toggleSnippetExpansion(snippet.id),
+                        className: "text-xs text-yellow-400 hover:text-yellow-300 flex items-center gap-1 mt-1",
+                        children: [
+                          isFullContentExpanded ? "▼" : "▶",
+                          " ",
+                          isFullContentExpanded ? "Show Less" : "Show More"
+                        ]
+                      }
+                    )
+                  ] })
+                ] }, snippet.id);
+              })
+            ] })
+          ] }, idx)),
+          sections.length === 0 && !isLoading && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-center text-gray-400 mt-8", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-2xl mb-2", children: "🧠" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm", children: "Welcome to Sticky Brain!" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs mt-2 max-w-xs mx-auto leading-relaxed", children: "Start typing thoughts in a Sticky and I'll grab relevant snippets from other Stickies of yours." })
           ] })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-gray-300 leading-relaxed", children: data.summary })
-      ] }),
-      data.paragraph && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2 p-2 bg-yellow-800/40 rounded text-xs", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-semibold", children: "DEBUG paragraph:" }),
-        " ",
-        data.paragraph
-      ] }),
-      data.snippets.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { className: "text-sm font-semibold text-yellow-400 flex items-center gap-2", children: [
-          "🔍 Related Snippets",
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "bg-yellow-400/20 text-yellow-300 px-2 py-0.5 rounded text-xs", children: data.snippets.length })
-        ] }),
-        data.snippets.map((snippet) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "p-3 bg-white/10 rounded", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-between mb-2 flex-wrap gap-2", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-xs font-medium text-blue-400 flex items-center gap-1", children: [
-              "📌 ",
-              snippet.stickyTitle
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-xs text-gray-500", children: [
-                "#",
-                data.snippets.indexOf(snippet) + 1
-              ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-xs bg-green-400/20 text-green-300 px-2 py-0.5 rounded", children: [
-                (snippet.similarity * 100).toFixed(1),
-                "% match"
-              ] })
-            ] })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-gray-300 leading-relaxed", children: snippet.content }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2 pt-2 border-t border-gray-700", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-xs text-gray-500", children: [
-            "ID: ",
-            snippet.id,
-            " | Length: ",
-            snippet.content.length,
-            " chars"
-          ] }) })
-        ] }, snippet.id))
-      ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-center text-gray-400 mt-8", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-2xl mb-2", children: "🤔" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "No results yet" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs mt-2", children: "Edit a Sticky note to see RAG results" })
-      ] })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-center", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-gray-600", children: [
-      "🔧 RAG Pipeline Debug Mode | Last Update: ",
-      lastUpdated || "Never"
-    ] }) })
-  ] });
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-center" })
+      ]
+    }
+  ) });
 }
 client.createRoot(document.getElementById("root")).render(
   /* @__PURE__ */ jsxRuntimeExports.jsx(React.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) })

@@ -200,6 +200,9 @@ importers:
       openai:
         specifier: ^4.24.1
         version: 4.104.0(encoding@0.1.13)(ws@8.18.3)(zod@3.25.67)
+      rtf2text:
+        specifier: ^1.0.1
+        version: 1.0.1
     devDependencies:
       '@types/node':
         specifier: ^20.10.5

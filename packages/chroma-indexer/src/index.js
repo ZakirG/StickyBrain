@@ -114,6 +114,17 @@ function stripRtfTags(rtfContent) {
     return text;
 }
 /**
+ * Optional: high-quality RTF → text converter (falls back to regex stripper if unavailable)
+ */
+let rtfToText;
+try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    rtfToText = (await import('rtf-to-text')).default;
+    console.log('[index] Using rtf-to-text library for clean extraction');
+} catch {
+    rtfToText = undefined;
+}
+/**
  * Extracts plain text from RTFD files by reading TXT.rtf and stripping RTF tags
  * @param rtfdPath Path to the .rtfd bundle
  * @returns Plain text content
@@ -122,7 +133,7 @@ export function extractTextFromRtfd(rtfdPath) {
     const txtPath = join(rtfdPath, 'TXT.rtf');
     try {
         const rtfContent = readFileSync(txtPath, 'utf-8');
-        const plainText = stripRtfTags(rtfContent);
+        const plainText = rtfToText ? rtfToText(rtfContent) : stripRtfTags(rtfContent);
         const title = basename(rtfdPath, '.rtfd');
         return { text: plainText, title };
     }
@@ -183,7 +194,25 @@ export async function indexStickies(opts = {}) {
     rtfdPaths.forEach((p) => {
         const plain = extractTextFromRtfd(p);
         const chunks = splitIntoParagraphs(plain.text);
-        const stickyTitle = plain.title;
+        // Derive title from first non-empty line, fallback to file basename
+        let stickyTitle = plain.text.split(/\n+/).map(l => l.trim()).find(l => l.length > 0) || plain.title;
+        if (stickyTitle.length > 120) stickyTitle = stickyTitle.slice(0, 117) + '...';
+        console.log(`[index] Processed sticky "${stickyTitle}" – ${chunks.length} paragraphs, ${plain.text.length} chars total`);
+        const fullText = plain.text;
+        // Add a title vector so that searches by note-name work
+        const truncatedTitle = stickyTitle.length > 100 ? stickyTitle.slice(0, 100) : stickyTitle;
+        paragraphs.push({
+            id: `${stickyTitle}_title`,
+            text: `${truncatedTitle} (title)`,
+            meta: {
+                filePath: p,
+                stickyTitle,
+                isTitle: true,
+                preview: fullText.slice(0, 1000),
+                text: `${truncatedTitle} (title)`,
+            },
+        });
+        // Regular paragraph chunks
         chunks.forEach((chunk, idx) => {
             paragraphs.push({
                 id: `${stickyTitle}_${idx}`,
@@ -192,6 +221,7 @@ export async function indexStickies(opts = {}) {
                     filePath: p,
                     stickyTitle,
                     paragraphIndex: idx,
+                    text: chunk,
                 },
             });
         });

@@ -14,6 +14,18 @@ import OpenAI from 'openai';
 // Load environment variables
 dotenv.config();
 
+// Dynamic import for rtf2text to work with ES modules
+let rtf2textString: any;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const rtf2textModule = (await import('rtf2text')) as any;
+  rtf2textString = rtf2textModule.string || rtf2textModule.default?.string;
+  console.log('[index] rtf2text package loaded successfully');
+} catch {
+  console.warn('[index] rtf2text package not available, falling back to regex stripping');
+  rtf2textString = null;
+}
+
 // Try to import Chroma client – fallback to undefined if lib not available at runtime
 let ChromaClientCtor: any;
 try {
@@ -126,24 +138,77 @@ export class InMemoryChromaClient {
  * @returns Plain text content
  */
 function stripRtfTags(rtfContent: string): string {
-  // Hex-encoded chars (\'hh)
-  let text = rtfContent.replace(/\\'([0-9a-fA-F]{2})/g, (_, hex) => {
-    return String.fromCharCode(parseInt(hex, 16));
+  let text = rtfContent;
+
+  // First, remove the RTF header and font/color tables
+  text = text.replace(/^{\s*\\rtf1[^}]*}/, '');
+  text = text.replace(/{\s*\\fonttbl[^}]*}/g, '');
+  text = text.replace(/{\s*\\colortbl[^}]*}/g, '');
+  text = text.replace(/{\s*\\\*\\expandedcolortbl[^}]*}/g, '');
+
+  // Remove paragraph formatting
+  text = text.replace(/\\pard[^\\]*/g, '');
+  text = text.replace(/\\tx\d+/g, '');
+  text = text.replace(/\\pardirnatural/g, '');
+  text = text.replace(/\\partightenfactor\d+/g, '');
+
+  // Handle font changes - remove the formatting but keep the text
+  text = text.replace(/\\f\d+/g, '');
+  text = text.replace(/\\fs\d+/g, '');
+  text = text.replace(/\\cf\d+/g, '');
+
+  // Handle bold/italic formatting
+  text = text.replace(/\\b\d*/g, '');
+  text = text.replace(/\\i\d*/g, '');
+
+  // Handle Unicode characters (\uN)
+  text = text.replace(/\\u(\d+)\\?/g, (match, code) => {
+    const charCode = parseInt(code, 10);
+    if (charCode >= 0 && charCode <= 65535) {
+      return String.fromCharCode(charCode);
+    }
+    return '';
   });
 
-  // Convert paragraph delimiters to real newlines
-  text = text.replace(/\\par[d]?/g, '\n');
+  // Hex-encoded chars (\'hh) - be more careful with these
+  text = text.replace(/\\'([0-9a-fA-F]{2})/g, (_, hex) => {
+    try {
+      return String.fromCharCode(parseInt(hex, 16));
+    } catch {
+      return '';
+    }
+  });
 
-  // Remove all other control words
-  text = text.replace(/\\[a-zA-Z]+-?\d* ?/g, '');
+  // Convert RTF line breaks to actual line breaks
+  text = text.replace(/\\par\b/g, '\n');
+  text = text.replace(/\\line\b/g, '\n');
+  text = text.replace(/\\\\/g, '\n');
 
-  // Remove braces
+  // Remove all remaining control words
+  text = text.replace(/\\[a-zA-Z]+\d*\s?/g, ' ');
+
+  // Remove control symbols and braces
+  text = text.replace(/\\[^a-zA-Z\s]/g, '');
   text = text.replace(/[{}]/g, '');
 
-  // Collapse spaces and tabs (preserve newlines for paragraph detection)
-  text = text.replace(/[ \t\r]+/g, ' ').trim();
+  // Remove any remaining backslashes
+  text = text.replace(/\\/g, ' ');
 
-  return text;
+  // Clean up whitespace
+  text = text.replace(/\s+/g, ' ');
+  text = text.replace(/\n\s+/g, '\n');
+  text = text.replace(/\s+\n/g, '\n');
+
+  // Split into lines and clean each line
+  const lines = text.split('\n').map(line => line.trim()).filter(line => {
+    // Skip empty lines
+    if (!line) return false;
+    // Skip lines that are just punctuation or numbers
+    if (/^[;,.\-\s\d]*$/.test(line)) return false;
+    return true;
+  });
+
+  return lines.join('\n').trim();
 }
 
 /**
@@ -156,6 +221,7 @@ export function extractTextFromRtfd(rtfdPath: string): { text: string; title: st
   
   try {
     const rtfContent = readFileSync(txtPath, 'utf-8');
+    // Use regex-based RTF stripping for now since rtf2text has Unicode issues
     const plainText = stripRtfTags(rtfContent);
     const title = basename(rtfdPath, '.rtfd');
     return { text: plainText, title };
@@ -173,9 +239,34 @@ export function extractTextFromRtfd(rtfdPath: string): { text: string; title: st
  */
 export function splitIntoParagraphs(text: string): string[] {
   return text
-    .split(/\n{2,}/)
+    // Split on double newlines, single newlines followed by blank lines, or multiple line breaks
+    .split(/\n\s*\n+|\n{2,}/)
     .map((p) => p.trim())
-    .filter((p) => p.length > 0);
+    .filter((p) => p.length > 0)
+    // Also split very long paragraphs (over 1000 chars) at sentence boundaries
+    .flatMap(p => {
+      if (p.length <= 1000) return [p];
+      
+      // Split long paragraphs at sentence boundaries
+      const sentences = p.split(/(?<=[.!?])\s+/);
+      const chunks = [];
+      let currentChunk = '';
+      
+      for (const sentence of sentences) {
+        if (currentChunk.length + sentence.length > 1000 && currentChunk) {
+          chunks.push(currentChunk.trim());
+          currentChunk = sentence;
+        } else {
+          currentChunk += (currentChunk ? ' ' : '') + sentence;
+        }
+      }
+      
+      if (currentChunk) {
+        chunks.push(currentChunk.trim());
+      }
+      
+      return chunks.filter(chunk => chunk.length > 0);
+    });
 }
 
 /**
@@ -276,33 +367,40 @@ export async function indexStickies(opts: IndexOptions = {}) {
   rtfdPaths.forEach((p) => {
     const plain = extractTextFromRtfd(p);
     const chunks = splitIntoParagraphs(plain.text);
-    const stickyTitle = plain.title;
+    
+    // Use the first non-empty line of the sticky as its title; fallback to file basename
+    const fileId = plain.title; // a.k.a file basename
+    let stickyTitle = plain.text.split('\n').map(l => l.trim()).find(l => l.length > 0) || fileId;
+    if (stickyTitle.length > 120) {
+      stickyTitle = stickyTitle.slice(0, 117) + '...';
+    }
+    console.log(`[index] Processed sticky "${stickyTitle}" – ${chunks.length} paragraphs, ${plain.text.length} chars total`);
     const fullText = plain.text;
 
     // Add title vector for semantic title matching
     const truncatedTitle = stickyTitle.length > 100 ? stickyTitle.slice(0, 100) : stickyTitle;
     paragraphs.push({
-      id: `${stickyTitle}_title`,
+      id: `${fileId}_title`, // Use unique file ID
       text: `${truncatedTitle} (title)`,
       meta: {
         filePath: p,
-        stickyTitle,
+        stickyTitle: sanitizeForJson(stickyTitle),
         isTitle: true,
-        preview: fullText.slice(0, 1000),
-        text: `${truncatedTitle} (title)`,
+        preview: sanitizeForJson(fullText.slice(0, 1000)),
+        text: sanitizeForJson(`${truncatedTitle} (title)`),
       },
     });
 
     // Add regular paragraph chunks
     chunks.forEach((chunk, idx) => {
       paragraphs.push({
-        id: `${stickyTitle}_${idx}`,
+        id: `${fileId}_${idx}`, // Use unique file ID
         text: chunk,
         meta: {
           filePath: p,
-          stickyTitle,
+          stickyTitle: sanitizeForJson(stickyTitle),
           paragraphIndex: idx,
-          text: chunk,
+          text: sanitizeForJson(chunk),
         },
       });
     });
@@ -429,4 +527,33 @@ async function mainCLI() {
 const isMainModule = process.argv[1] && process.argv[1].endsWith('index.js');
 if (isMainModule) {
   mainCLI().catch(console.error);
+}
+
+/**
+ * Sanitize text for safe JSON storage
+ * @param text Input text
+ * @returns Sanitized text safe for JSON
+ */
+function sanitizeForJson(text: string): string {
+  return text
+    // Remove control characters except newlines and tabs
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+    // Remove any remaining backslashes that could cause issues
+    .replace(/\\/g, '')
+    // Remove any hex escape patterns that could be malformed
+    .replace(/\\x[0-9a-fA-F]*/g, '')
+    .replace(/\\u[0-9a-fA-F]*/g, '')
+    // Remove any problematic Unicode characters
+    .replace(/[\uFFFE\uFFFF]/g, '')
+    // Remove high Unicode surrogates that can cause issues
+    .replace(/[\uD800-\uDFFF]/g, '')
+    // Ensure proper Unicode handling
+    .normalize('NFC')
+    // Remove any remaining RTF artifacts
+    .replace(/[{}]/g, '')
+    // Remove quotes that could break JSON
+    .replace(/"/g, "'")
+    // Clean up multiple spaces
+    .replace(/\s+/g, ' ')
+    .trim();
 } 

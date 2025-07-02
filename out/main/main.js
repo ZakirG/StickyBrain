@@ -193,10 +193,12 @@ async function cleanSnippetText(raw) {
   cleaned = cleaned.replace(/[{}]/g, "");
   cleaned = cleaned.replace(/\n{3,}/g, "\n\n");
   cleaned = cleaned.replace(/[ \t]+/g, " ");
+  cleaned = cleaned.replace(/ {2,}/g, " ");
   cleaned = cleaned.replace(/\n\s+/g, "\n");
   cleaned = cleaned.replace(/\s+\n/g, "\n");
   cleaned = cleaned.trim();
   cleaned = cleaned.replace(/^[^a-zA-Z0-9\n]*/, "");
+  cleaned = cleaned.replace(/[\u2018\u2019\u201A\u0091\u0092]/g, "'").replace(/[\u201C\u201D\u201E\u0093\u0094]/g, '"');
   console.log("🧹 [MAIN] Cleaned snippet content:", JSON.stringify(cleaned));
   return cleaned;
 }
@@ -238,6 +240,9 @@ const createFloatingWindow = () => {
     const [x, y] = mainWindow.getPosition();
     fs.writeFileSync(statePath, JSON.stringify({ x, y }));
   });
+  if (process.env.OPEN_DEVTOOLS === "1") {
+    mainWindow.webContents.openDevTools();
+  }
 };
 electron.app.whenReady().then(() => {
   createFloatingWindow();
@@ -262,7 +267,7 @@ electron.app.whenReady().then(() => {
           msg.result.snippets = await Promise.all(msg.result.snippets.map(async (s) => {
             if (s.filePath) {
               const noteText = await extractPlainTextFromRtfFile(path.join(s.filePath, "TXT.rtf"));
-              return { ...s, noteText, content: await cleanSnippetText(s.content || "") };
+              return { ...s, noteText: await cleanSnippetText(noteText), content: await cleanSnippetText(s.content || "") };
             }
             return { ...s, content: await cleanSnippetText(s.content || "") };
           }));

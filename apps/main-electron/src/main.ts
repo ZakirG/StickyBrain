@@ -118,6 +118,7 @@ async function cleanSnippetText(raw: string): Promise<string> {
   
   // Clean up whitespace but preserve newlines
   cleaned = cleaned.replace(/[ \t]+/g, ' '); // collapse spaces and tabs
+  cleaned = cleaned.replace(/ {2,}/g, ' '); // replace 2+ spaces with single space
   cleaned = cleaned.replace(/\n\s+/g, '\n'); // clean up whitespace after newlines
   cleaned = cleaned.replace(/\s+\n/g, '\n'); // clean up whitespace before newlines
   
@@ -126,6 +127,11 @@ async function cleanSnippetText(raw: string): Promise<string> {
   
   // Remove any remaining artifacts at the beginning
   cleaned = cleaned.replace(/^[^a-zA-Z0-9\n]*/, '');
+  
+  // Normalize curly quotes and weird CP1252 apostrophes to straight ASCII equivalents
+  cleaned = cleaned
+    .replace(/[\u2018\u2019\u201A\u0091\u0092]/g, "'") // single quotes
+    .replace(/[\u201C\u201D\u201E\u0093\u0094]/g, '"');
   
   console.log('🧹 [MAIN] Cleaned snippet content:', JSON.stringify(cleaned));
   return cleaned;
@@ -183,8 +189,10 @@ const createFloatingWindow = (): void => {
 
   // Note: Blur event handler removed to prevent clearing content when window loses focus
 
-  // Uncomment the next line if you need DevTools during debugging
-  // mainWindow.webContents.openDevTools();
+  // Open DevTools only when explicitly enabled via env flag
+  if (process.env.OPEN_DEVTOOLS === '1') {
+    mainWindow.webContents.openDevTools();
+  }
 };
 
 // App event handlers
@@ -220,7 +228,7 @@ app.whenReady().then(() => {
           msg.result.snippets = await Promise.all(msg.result.snippets.map(async (s: any) => {
             if (s.filePath) {
               const noteText = await extractPlainTextFromRtfFile(joinPath(s.filePath, 'TXT.rtf'));
-              return { ...s, noteText, content: await cleanSnippetText(s.content || '') };
+              return { ...s, noteText: await cleanSnippetText(noteText), content: await cleanSnippetText(s.content || '') };
             }
             return { ...s, content: await cleanSnippetText(s.content || '') };
           }));

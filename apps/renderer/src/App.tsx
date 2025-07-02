@@ -265,7 +265,9 @@ function App() {
                     const isFullContentExpanded = expandedSnippets.has(snippet.id);
                     const isSnippetContentExpanded = expandedSnippetContent.has(snippet.id);
                     
+                    console.log('🔍 [RENDERER] Raw snippet content:', JSON.stringify(snippet.content));
                     const snippetPreview = extractPreview(snippet.content);
+                    console.log('🔍 [RENDERER] Processed snippet preview:', JSON.stringify(snippetPreview));
                     const shouldShowSnippetToggle = snippet.content.length > snippetPreview.length;
                     
                     const fullContentPreview = snippet.noteText ? extractPreview(snippet.noteText) : '';
@@ -289,7 +291,12 @@ function App() {
                             {isSnippetContentExpanded ? '▼' : '▶'} Snippet Text
                           </button>
                           <div className="p-2 bg-gray-800/60 rounded text-xs whitespace-pre-line">
-                            {isSnippetContentExpanded ? snippet.content : snippetPreview}
+                            {(() => {
+                              const displayContent = isSnippetContentExpanded ? snippet.content : snippetPreview;
+                              console.log('🖥️ [RENDERER] Content being displayed:', JSON.stringify(displayContent));
+                              console.log('🖥️ [RENDERER] Content char codes:', displayContent.split('').map(c => c.charCodeAt(0)).join(','));
+                              return displayContent;
+                            })()}
                           </div>
                           {shouldShowSnippetToggle && (
                             <button

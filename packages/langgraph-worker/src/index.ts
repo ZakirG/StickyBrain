@@ -161,6 +161,7 @@ export interface Snippet {
 export interface PipelineResult {
   snippets: Snippet[];
   summary: string;
+  webSearchPrompt?: string;
 }
 
 interface PipelineOptions {
@@ -191,6 +192,9 @@ const RagStateAnnotation = Annotation.Root({
   
   // Filtered results
   filteredSnippets: Annotation<Snippet[]>,
+  
+  // Web search prompt generation
+  webSearchPrompt: Annotation<string>,
   
   // Final output
   summary: Annotation<string>,
@@ -439,6 +443,20 @@ async function summariseNode(state: RagState): Promise<Partial<RagState>> {
 }
 
 /**
+ * WebSearchPromptGeneratorNode - Generates web search prompts based on user input
+ */
+async function webSearchPromptGeneratorNode(state: RagState): Promise<Partial<RagState>> {
+  console.log('🔍 [WEB SEARCH NODE] Generating web search prompt...');
+  
+  const webSearchPrompt = await generateWebSearchPrompt(state.paragraphText, state.openai);
+  console.log('✅ [WEB SEARCH NODE] Web search prompt generated:', webSearchPrompt.substring(0, 100) + '...');
+
+  return {
+    webSearchPrompt,
+  };
+}
+
+/**
  * OutputNode - Prepares final result
  */
 async function outputNode(state: RagState): Promise<Partial<RagState>> {
@@ -447,11 +465,13 @@ async function outputNode(state: RagState): Promise<Partial<RagState>> {
   const result: PipelineResult = {
     snippets: state.filteredSnippets,
     summary: state.summary,
+    webSearchPrompt: state.webSearchPrompt,
   };
 
   console.log('📊 [OUTPUT NODE] Final results:');
   console.log('  - Snippets:', result.snippets.length);
   console.log('  - Summary length:', result.summary.length);
+  console.log('  - Web search prompt length:', result.webSearchPrompt?.length || 0);
 
   return {
     result,
@@ -523,6 +543,60 @@ async function generateSummary(paragraph: string, snippets: Snippet[], openai: O
 }
 
 /**
+ * Generate web search prompt using OpenAI or fallback
+ */
+async function generateWebSearchPrompt(paragraph: string, openai: OpenAI): Promise<string> {
+  // Use OpenAI if we have an API key OR if we're in test mode with a mocked instance
+  const shouldUseOpenAI = process.env.OPENAI_API_KEY || process.env.NODE_ENV === 'test';
+  
+  if (shouldUseOpenAI) {
+    try {
+      const prompt = `You are an AI assistant that helps generate effective web search queries. Based on what the user is currently typing or thinking about, create 3-5 specific, targeted web search queries that would help them find relevant information online.
+
+The user is currently writing: "${paragraph}"
+
+Generate web search queries that would help them:
+1. Find specific information related to their current topic
+2. Discover relevant resources, tools, or examples
+3. Get expert insights or recent developments in this area
+4. Find practical guidance or how-to information
+
+Format your response as a simple list of search queries, one per line. Instead of bullet points use single dashes "-". Make each query specific and actionable. Focus on what would be most helpful for someone thinking about this topic right now.
+
+Example format:
+how to build mobile apps for beginners 2024
+best mobile app development frameworks comparison
+mobile app monetization strategies small developers
+app store optimization techniques 2024
+successful indie app developer case studies`;
+      
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        max_tokens: 300,
+        messages: [
+          { role: 'system', content: 'You are a helpful assistant that generates targeted web search queries.' },
+          { role: 'user', content: prompt },
+        ],
+      });
+      
+      return response.choices[0].message.content || 'No web search suggestions generated.';
+    } catch (error) {
+      console.warn('🔄 [WORKER] OpenAI web search prompt generation failed, using fallback:', error);
+    }
+  }
+  
+  // Fallback web search prompt
+  console.log('🔄 [WORKER] Using fallback web search prompt generation');
+  return `Search suggestions based on: "${paragraph.substring(0, 50)}${paragraph.length > 50 ? '...' : ''}"
+
+Try searching for:
+- ${paragraph.split(' ').slice(0, 3).join(' ')} tutorial
+- ${paragraph.split(' ').slice(0, 3).join(' ')} best practices
+- ${paragraph.split(' ').slice(0, 3).join(' ')} examples
+- ${paragraph.split(' ').slice(0, 3).join(' ')} guide 2024`;
+}
+
+/**
  * Main RAG pipeline using LangGraph StateGraph
  */
 export async function runRagPipeline(paragraph: string, options?: {
@@ -551,13 +625,16 @@ export async function runRagPipeline(paragraph: string, options?: {
     .addNode('retrieve', retrieveNode)
     .addNode('filter', filterNode)
     .addNode('summarise', summariseNode)
+    .addNode('webSearchGen', webSearchPromptGeneratorNode)
     .addNode('output', outputNode)
     .addEdge('__start__', 'input')
     .addEdge('input', 'embed')
+    .addEdge('input', 'webSearchGen')  // Run web search in parallel
     .addEdge('embed', 'retrieve')
     .addEdge('retrieve', 'filter')
     .addEdge('filter', 'summarise')
     .addEdge('summarise', 'output')
+    .addEdge('webSearchGen', 'output')  // Both paths converge at output
     .addEdge('output', '__end__');
 
   const app = workflow.compile();
@@ -576,6 +653,7 @@ export async function runRagPipeline(paragraph: string, options?: {
     filteredSnippets: [],
     summary: '',
     result: { snippets: [], summary: '' },
+    webSearchPrompt: '',
   };
 
   console.log('🔄 [WORKER] Executing LangGraph workflow...');

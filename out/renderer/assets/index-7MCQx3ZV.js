@@ -7227,10 +7227,16 @@ function App() {
               /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs mt-2 max-w-xs mx-auto leading-relaxed", children: "Start typing thoughts in a Sticky and I'll grab relevant snippets from other Stickies of yours." })
             ] })
           ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex-1 border-l border-gray-700 pl-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-center text-gray-500 mt-8", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-2xl mb-2", children: "📝" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm", children: "Second Column" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs mt-2 max-w-xs mx-auto leading-relaxed", children: "This space is reserved for future features." })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex-1 border-l border-gray-700 pl-4", children: sections.length > 0 && sections[0].webSearchPrompt ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-sm font-semibold text-purple-400 flex items-center gap-2", children: "🔍 Suggested Web Searches" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-gray-800 border border-purple-600/30 rounded p-3", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-gray-400 mb-2", children: "Based on what you're writing:" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "text-sm text-gray-300 leading-relaxed whitespace-pre-wrap font-sans", children: sections[0].webSearchPrompt })
+            ] })
+          ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-center text-gray-500 mt-8", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-2xl mb-2", children: "🔍" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm", children: "Web Search Suggestions" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs mt-2 max-w-xs mx-auto leading-relaxed", children: "Start typing in a Sticky and I'll suggest relevant web searches." })
           ] }) })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-center" })

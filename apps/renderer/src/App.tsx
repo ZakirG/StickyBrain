@@ -32,6 +32,7 @@ interface SectionData {
   snippets: Snippet[];
   summary: string;
   paragraph?: string;
+  webSearchPrompt?: string;
 }
 
 /**
@@ -364,15 +365,28 @@ function App() {
             )}
           </div>
 
-          {/* Right Column - Empty for now */}
+          {/* Right Column - Web Search Prompts */}
           <div className="flex-1 border-l border-gray-700 pl-4">
-            <div className="text-center text-gray-500 mt-8">
-              <div className="text-2xl mb-2">📝</div>
-              <p className="text-sm">Second Column</p>
-              <p className="text-xs mt-2 max-w-xs mx-auto leading-relaxed">
-                This space is reserved for future features.
-              </p>
-            </div>
+            {sections.length > 0 && sections[0].webSearchPrompt ? (
+              <div className="space-y-3">
+                <div className="bg-gray-800 border border-purple-600/30 rounded p-3">
+                  <h2 className="text-sm font-semibold text-purple-400 flex items-center gap-2">
+                    🔍 Suggested Web Searches
+                  </h2>
+                  <pre className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap font-sans">
+                    {sections[0].webSearchPrompt}
+                  </pre>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center text-gray-500 mt-8">
+                <div className="text-2xl mb-2">🔍</div>
+                <p className="text-sm">Web Search Suggestions</p>
+                <p className="text-xs mt-2 max-w-xs mx-auto leading-relaxed">
+                  Start typing in a Sticky and I'll suggest relevant web searches.
+                </p>
+              </div>
+            )}
           </div>
         </div>
 

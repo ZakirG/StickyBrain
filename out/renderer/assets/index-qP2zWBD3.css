@@ -652,6 +652,9 @@ video {
 .border-green-600\/30 {
   border-color: rgb(22 163 74 / 0.3);
 }
+.border-purple-600\/30 {
+  border-color: rgb(147 51 234 / 0.3);
+}
 .bg-black {
   --tw-bg-opacity: 1;
   background-color: rgb(0 0 0 / var(--tw-bg-opacity, 1));
@@ -774,6 +777,10 @@ video {
 .text-green-400 {
   --tw-text-opacity: 1;
   color: rgb(74 222 128 / var(--tw-text-opacity, 1));
+}
+.text-purple-400 {
+  --tw-text-opacity: 1;
+  color: rgb(192 132 252 / var(--tw-text-opacity, 1));
 }
 .text-white {
   --tw-text-opacity: 1;

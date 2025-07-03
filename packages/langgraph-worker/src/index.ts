@@ -991,33 +991,8 @@ export async function runRagPipeline(paragraph: string, options?: {
   console.log('  - Current file path:', currentFilePath);
   console.log('  - User goals:', userGoals);
 
-  // Create the LangGraph StateGraph
-  const workflow = new StateGraph(RagStateAnnotation)
-    .addNode('input', inputNode)
-    .addNode('embed', embedNode)
-    .addNode('retrieve', retrieveNode)
-    .addNode('filter', filterNode)
-    .addNode('summarise', summariseNode)
-    .addNode('webSearchGen', webSearchPromptGeneratorNode)
-    .addNode('webSearchExec', webSearchExecutionNode)
-    .addNode('webScraping', webScrapingNode)
-    .addNode('output', outputNode)
-    .addEdge('__start__', 'input')
-    .addEdge('input', 'embed')
-    .addEdge('input', 'webSearchGen')  // Run web search in parallel
-    .addEdge('embed', 'retrieve')
-    .addEdge('retrieve', 'filter')
-    .addEdge('filter', 'summarise')
-    .addEdge('summarise', 'output')
-    .addEdge('webSearchGen', 'webSearchExec')  // Web search sequence
-    .addEdge('webSearchExec', 'webScraping')   // Scraping after search
-    .addEdge('webScraping', 'output')          // Both paths converge at output
-    .addEdge('output', '__end__');
-
-  const app = workflow.compile();
-
   // Initialize state
-  const initialState: RagState = {
+  let state: RagState = {
     paragraphText: paragraph,
     currentFilePath,
     userGoals,
@@ -1035,14 +1010,67 @@ export async function runRagPipeline(paragraph: string, options?: {
     webSearchResults: [],
   };
 
-  console.log('🔄 [WORKER] Executing LangGraph workflow...');
+  console.log('🔄 [WORKER] Executing RAG path first...');
   
-  // Run the graph
-  const finalState = await app.invoke(initialState);
+  // Execute RAG path manually and send incremental updates immediately
+  try {
+    // Input node
+    const inputResult = await inputNode(state);
+    state = { ...state, ...inputResult };
+    
+    // Embed node
+    const embedResult = await embedNode(state);
+    state = { ...state, ...embedResult };
+    
+    // Retrieve node
+    const retrieveResult = await retrieveNode(state);
+    state = { ...state, ...retrieveResult };
+    
+    // Filter node
+    const filterResult = await filterNode(state);
+    state = { ...state, ...filterResult };
+    
+    // Summarise node (this will send incremental update)
+    const summariseResult = await summariseNode(state);
+    state = { ...state, ...summariseResult };
+    
+    console.log('✅ [WORKER] RAG path completed, incremental update sent');
+  } catch (error) {
+    console.error('❌ [WORKER] RAG path failed:', error);
+  }
+
+  console.log('🔄 [WORKER] Executing web search path in parallel...');
+  
+  // Execute web search path separately (this will also send incremental updates)
+  try {
+    // Web search prompt generation (parallel to RAG)
+    const webSearchGenResult = await webSearchPromptGeneratorNode(state);
+    state = { ...state, ...webSearchGenResult };
+    
+    // Web search execution
+    const webSearchExecResult = await webSearchExecutionNode(state);
+    state = { ...state, ...webSearchExecResult };
+    
+    // Web scraping
+    const webScrapingResult = await webScrapingNode(state);
+    state = { ...state, ...webScrapingResult };
+    
+    console.log('✅ [WORKER] Web search path completed');
+  } catch (error) {
+    console.error('❌ [WORKER] Web search path failed:', error);
+  }
+
+  // Prepare final result
+  const result: PipelineResult = {
+    snippets: state.filteredSnippets,
+    summary: state.summary,
+    webSearchPrompt: state.webSearchPrompt,
+    webSearchResults: state.webSearchResults,
+  };
 
   console.log('🎉 [WORKER] LangGraph RAG pipeline completed successfully!');
   
-  return finalState.result;
+  return result;
 }
 
 // Worker process mode

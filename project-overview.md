@@ -304,14 +304,3 @@ Use Electron’s **context-isolated IPC** (`ipcMain`, `ipcRenderer`, and a `prel
 
 *A single dev week gets you usable value; later you can swap in a native helper, add summarisation, feedback buttons, and richer attachment handling.*
 
----
-
-### Next-Step Checklist for You
-
-1. **Confirm** that using “last modified file” is acceptable for picking the active Sticky in v1.
-2. **Verify** you have a Mac Developer certificate or are ok with GateKeeper warnings.
-3. **Decide** whether you want the optional summarising node enabled on day one (it adds negligible dev effort but does cost extra GPT calls).
-
-1) last modified file is fine.
-2) warnings fine
-3) yes i want the summarizing node. it should look at the retrieved RAG snippets and the user's most recent paragraph and explain the connection between them in 3 sentences or less.

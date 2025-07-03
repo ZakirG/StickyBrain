@@ -1171,15 +1171,18 @@ async function generateStickyBrainSynthesis(
   We don't want fluff. We don't want vague LLM babble. We just want a tiny bit of EXTREMELY RELEVANT
   INFORMATION that will benefit the user. For example, if the user typed "I'm hungry but I'm not sure what to eat..." and in their old writings they wrote "grocery list // foods i tend to eat: bananas, 3 apples, grapes, 1 sweet potato, celery, dole fruit cups, milk, frozen food, aim healthy, aim chicken" then you should literally just reply with "In your old writings you mention that you like bananas, apples, grapes, sweet potatoes, celery, and chicken." That is an example of an extremely useful and concise sentence. Prefer the user's old writings over web search results whenever possible. Your reply should be extremely, extremely relevant to what the user has most recently typed, which once again is: "${userInput}"
   Remember, the user's old writings may be from a very long time ago, so keep that in mind. If the user is currently thinking about an unnamed app for example, and their old writings also mention that they're working on an app, don't assume that these are the same app. Their old writings are old.
+  When summarizing the web browsing, start your summary with "From my web browsing, I found that".
 
   Below are the two sources you will be extracting information from.
   1) Summary from User's Old Writings:
   "${ragSummary}"
 
-  2) Summary of Web Research Performed on behalf of the user:
+  2) Summary of Web Browsing Performed on behalf of the user:
   "${webResearchSummary}"
   
-  Now please reply with your one concise sentence that delivers USEFUL CONCRETE INFORMATION.
+  Now please reply with two concise sentences that deliver USEFUL CONCRETE INFORMATION.
+  The first sentence should be related to the user's old writings and the second sentence should be related ideas from the web browsing.
+  Separate your sentences into separate paragraphs with a blank line between them.
   No fluff. No bs. CONCRETE AND RELEVANT INFORMATION. INFORMATION. INFORMATION. Quote directly
   from the sources if necessary, but don't use quotation marks. INCLUDE USEFUL INFORMATION.
   `;
@@ -1192,7 +1195,7 @@ async function generateStickyBrainSynthesis(
         { role: 'user', content: prompt }
       ],
       temperature: 0.2,
-      max_tokens: 100,
+      max_tokens: 800,
     });
 
     const synthesis = response.choices[0]?.message?.content?.trim() || 'Failed to generate synthesis';

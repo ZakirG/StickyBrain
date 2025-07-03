@@ -264,6 +264,30 @@ This is a monorepo with the following structure:
 4. Run tests: `pnpm test`
 5. Submit a pull request
 
-## License
+## Query Examples
 
-MIT License - see LICENSE file for details
+For demo:
+
+      i'm bored. what are some things i do for fun?
+
+      i should develop new features for opusmelody...
+
+      if i had AI smart glasses, what are some sick apps i could build for it?
+
+
+Extra:
+
+      where should i put most of my time in 2025 if i'm gonna make the most money?
+
+      i want to build an app that uses LangGraph or n8n to do something particularly novel and useful with AI. something that makes my life easier or something that I can sell.
+
+
+For personal use:
+
+      whats the best music-making process i've done so far?
+
+      what's the most fun thing i've done that brought me the most joy?
+
+      what app ideas am i most excited about???
+
+      if i had a robot, what are some cool apps i could build for it?

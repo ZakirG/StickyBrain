@@ -162,6 +162,14 @@ export interface PipelineResult {
   snippets: Snippet[];
   summary: string;
   webSearchPrompt?: string;
+  webSearchResults?: WebSearchResult[];
+}
+
+export interface WebSearchResult {
+  query: string;
+  title: string;
+  url: string;
+  description: string;
 }
 
 interface PipelineOptions {
@@ -196,6 +204,7 @@ const RagStateAnnotation = Annotation.Root({
   
   // Web search prompt generation
   webSearchPrompt: Annotation<string>,
+  webSearchResults: Annotation<WebSearchResult[]>,
   
   // Final output
   summary: Annotation<string>,
@@ -458,6 +467,117 @@ async function webSearchPromptGeneratorNode(state: RagState): Promise<Partial<Ra
 }
 
 /**
+ * WebSearchExecutionNode - Executes actual web searches using Brave API
+ */
+async function webSearchExecutionNode(state: RagState): Promise<Partial<RagState>> {
+  console.log('🌐 [WEB SEARCH EXECUTION NODE] Executing web searches...');
+  
+  if (!state.webSearchPrompt) {
+    console.log('⚠️ [WEB SEARCH EXECUTION NODE] No web search prompt available');
+    return { webSearchResults: [] };
+  }
+  
+  const queries = state.webSearchPrompt
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line.length > 0)
+    .slice(0, 3); // Limit to 3 queries
+  
+  console.log('🔍 [WEB SEARCH EXECUTION NODE] Executing queries:', queries);
+  
+  const results: WebSearchResult[] = [];
+  
+  for (let i = 0; i < queries.length; i++) {
+    const query = queries[i];
+    console.log(`🌐 [WEB SEARCH EXECUTION NODE] Executing query ${i + 1}/${queries.length}: "${query}"`);
+    
+    try {
+      const searchResults = await executeWebSearch(query);
+      results.push(...searchResults);
+      console.log(`✅ [WEB SEARCH EXECUTION NODE] Query ${i + 1} completed, got ${searchResults.length} results`);
+    } catch (error) {
+      console.error(`❌ [WEB SEARCH EXECUTION NODE] Query ${i + 1} failed:`, error);
+    }
+    
+    // Add delay between queries (except for the last one)
+    if (i < queries.length - 1) {
+      console.log('⏱️ [WEB SEARCH EXECUTION NODE] Waiting 1.5 seconds before next query...');
+      await new Promise(resolve => setTimeout(resolve, 1500));
+    }
+  }
+  
+  console.log(`🎉 [WEB SEARCH EXECUTION NODE] Completed all searches, total results: ${results.length}`);
+  
+  return {
+    webSearchResults: results,
+  };
+}
+
+/**
+ * Execute web search using Brave API
+ */
+async function executeWebSearch(query: string): Promise<WebSearchResult[]> {
+  const apiKey = process.env.BRAVE_API_KEY;
+  
+  if (!apiKey) {
+    console.warn('⚠️ [WEB SEARCH] No Brave API key found, skipping search');
+    return [];
+  }
+  
+  try {
+    const response = await fetch('https://api.search.brave.com/res/v1/web/search', {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'Accept-Encoding': 'gzip',
+        'X-Subscription-Token': apiKey,
+      },
+      // Add query parameters
+      // Note: We'll construct the URL with query parameters
+    });
+    
+    // Construct URL with query parameters
+    const url = new URL('https://api.search.brave.com/res/v1/web/search');
+    url.searchParams.append('q', query);
+    url.searchParams.append('count', '3'); // Limit to 3 results per query
+    url.searchParams.append('search_lang', 'en');
+    url.searchParams.append('country', 'US');
+    url.searchParams.append('safesearch', 'moderate');
+    
+    const searchResponse = await fetch(url.toString(), {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'Accept-Encoding': 'gzip',
+        'X-Subscription-Token': apiKey,
+      },
+    });
+    
+    if (!searchResponse.ok) {
+      throw new Error(`Brave API error: ${searchResponse.status} ${searchResponse.statusText}`);
+    }
+    
+    const data = await searchResponse.json();
+    
+    if (!data.web || !data.web.results) {
+      console.warn('⚠️ [WEB SEARCH] No web results in response');
+      return [];
+    }
+    
+    return data.web.results.map((result: any) => ({
+      query,
+      title: result.title || 'No title',
+      url: result.url || '',
+      description: result.description || 'No description',
+    }));
+    
+  } catch (error) {
+    console.error('❌ [WEB SEARCH] Search failed for query:', query, error);
+    return [];
+  }
+}
+
+/**
  * OutputNode - Prepares final result
  */
 async function outputNode(state: RagState): Promise<Partial<RagState>> {
@@ -467,12 +587,14 @@ async function outputNode(state: RagState): Promise<Partial<RagState>> {
     snippets: state.filteredSnippets,
     summary: state.summary,
     webSearchPrompt: state.webSearchPrompt,
+    webSearchResults: state.webSearchResults,
   };
 
   console.log('📊 [OUTPUT NODE] Final results:');
   console.log('  - Snippets:', result.snippets.length);
   console.log('  - Summary length:', result.summary.length);
   console.log('  - Web search prompt length:', result.webSearchPrompt?.length || 0);
+  console.log('  - Web search results:', result.webSearchResults?.length || 0);
 
   return {
     result,
@@ -564,8 +686,8 @@ async function generateWebSearchPrompt(paragraph: string, userGoals: string, ope
   
   if (shouldUseOpenAI) {
     try {
-      const prompt = `Your task is to suggest informative clever creative rebellious think-outside-the-box web searches that help the user in whatever they're currently typing and thinking about.
-      Return 3-5 specific, targeted web search queries.
+      const prompt = `Your task is to suggest informative clever creative rebellious think-outside-the-box web searches that help the user in whatever they're currently typing and thinking about. Your suggestions might explore tangents related to what they're brainstorming in a way that can help inspire them with new ideas or give them information that might benefit them. Your queries will be automatically executed and the results will be shown to the user, helping their brainstorm process.
+      Return 3 specific, targeted web search queries.
 
       All of your web search suggestions should be DIRECTLY relevant to what the user is currently typing.
       Here's what the user is currently typing and thinking about: "${paragraph}"
@@ -578,11 +700,9 @@ async function generateWebSearchPrompt(paragraph: string, userGoals: string, ope
       Example format:
       - insane mobile apps 2025
       - highest selling iphone apps 2025
-      - best apps to get crazy jacked 2025
-      - best texting apps for insane rizz
-      - how to come up with app ideas fast
+      - how to come up with SaaS app ideas?
 
-      The focus of your web searches should be to gather unique information that could help spark your big brother's creativity based on what he's currently typing that helps him meet his larger goals. Return less than 5 web search options. All of your web search suggestions should be DIRECTLY relevant to what he's currently typing.
+      The focus of your web searches should be to gather unique information that could help spark your big brother's creativity based on what he's currently typing that helps him meet his larger goals. Return 3 web search options. All of your web search suggestions should be DIRECTLY relevant to what he's currently typing.
       Don't search for stupid vague things like "app ideas nobody has thought of yet", because obviously,
       tautologically, that's not gonna return useful information. DUHHHH. So instead, come up with clever ideas that complement what your big bro has typed in specific and concrete creative ways that match his unique goals.
       `;
@@ -648,6 +768,7 @@ export async function runRagPipeline(paragraph: string, options?: {
     .addNode('filter', filterNode)
     .addNode('summarise', summariseNode)
     .addNode('webSearchGen', webSearchPromptGeneratorNode)
+    .addNode('webSearchExec', webSearchExecutionNode)
     .addNode('output', outputNode)
     .addEdge('__start__', 'input')
     .addEdge('input', 'embed')
@@ -656,7 +777,8 @@ export async function runRagPipeline(paragraph: string, options?: {
     .addEdge('retrieve', 'filter')
     .addEdge('filter', 'summarise')
     .addEdge('summarise', 'output')
-    .addEdge('webSearchGen', 'output')  // Both paths converge at output
+    .addEdge('webSearchGen', 'webSearchExec')  // Both paths converge at output
+    .addEdge('webSearchExec', 'output')  // Both paths converge at output
     .addEdge('output', '__end__');
 
   const app = workflow.compile();
@@ -677,6 +799,7 @@ export async function runRagPipeline(paragraph: string, options?: {
     summary: '',
     result: { snippets: [], summary: '' },
     webSearchPrompt: '',
+    webSearchResults: [],
   };
 
   console.log('🔄 [WORKER] Executing LangGraph workflow...');

@@ -35,6 +35,14 @@ interface SectionData {
   summary: string;
   paragraph?: string;
   webSearchPrompt?: string;
+  webSearchResults?: WebSearchResult[];
+}
+
+interface WebSearchResult {
+  query: string;
+  title: string;
+  url: string;
+  description: string;
 }
 
 interface UserGoals {
@@ -452,16 +460,56 @@ function App() {
 
           {/* Right Column - Web Search Prompts */}
           <div className="flex-1 border-l border-gray-700 pl-4">
-            {sections.length > 0 && sections[0].webSearchPrompt ? (
-              <div className="space-y-3">
-                <div className="bg-gray-800 border border-purple-600/30 rounded p-3">
-                  <h2 className="text-sm font-semibold text-purple-400 flex items-center gap-2">
-                    🔍 Suggested Web Searches
-                  </h2>
-                  <pre className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap font-sans">
-                    {sections[0].webSearchPrompt}
-                  </pre>
-                </div>
+            {sections.length > 0 && (sections[0].webSearchPrompt || sections[0].webSearchResults) ? (
+              <div className="space-y-4">
+                {sections[0].webSearchPrompt && (
+                  <div className="space-y-3">
+                    <h2 className="text-sm font-semibold text-purple-400 flex items-center gap-2">
+                      🔍 Suggested Web Searches
+                    </h2>
+                    <div className="bg-gray-800 border border-purple-600/30 rounded p-3">
+                      <p className="text-xs text-gray-400 mb-2">Based on what you're writing:</p>
+                      <pre className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap font-sans">
+                        {sections[0].webSearchPrompt}
+                      </pre>
+                    </div>
+                  </div>
+                )}
+                
+                {sections[0].webSearchResults && sections[0].webSearchResults.length > 0 && (
+                  <div className="space-y-3">
+                    <h2 className="text-sm font-semibold text-green-400 flex items-center gap-2">
+                      🌐 Web Search Results
+                    </h2>
+                    <div className="space-y-3">
+                      {sections[0].webSearchResults.map((result, index) => (
+                        <div 
+                          key={`${result.query}-${index}`}
+                          className="bg-gray-800 border border-green-600/30 rounded p-3 animate-fade-in"
+                          style={{ animationDelay: `${index * 200}ms` }}
+                        >
+                          <div className="text-xs text-gray-400 mb-1">Query: {result.query}</div>
+                          <a 
+                            href={result.url} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="block hover:bg-gray-700/50 rounded p-1 -m-1 transition-colors"
+                          >
+                            <h3 className="text-sm font-medium text-blue-300 hover:text-blue-200 mb-1">
+                              {result.title}
+                            </h3>
+                            <p className="text-xs text-gray-300 leading-relaxed">
+                              {result.description}
+                            </p>
+                            <div className="text-xs text-green-400 mt-1 truncate">
+                              {result.url}
+                            </div>
+                          </a>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="text-center text-gray-500 mt-8">

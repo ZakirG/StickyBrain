@@ -198,7 +198,7 @@ async function cleanSnippetText(raw) {
 const createFloatingWindow = () => {
   mainWindow = new electron.BrowserWindow({
     height: 800,
-    width: 550,
+    width: 800,
     webPreferences: {
       preload: path.join(__dirname, "../preload/preload.js"),
       nodeIntegration: false,
@@ -222,11 +222,11 @@ const createFloatingWindow = () => {
       mainWindow.setPosition(state.x, state.y);
     } else {
       const { width: sw } = electron.screen.getPrimaryDisplay().workAreaSize;
-      mainWindow.setPosition(sw - 550 - 20, 20);
+      mainWindow.setPosition(sw - 1100 - 20, 20);
     }
   } catch {
     const { width: sw } = electron.screen.getPrimaryDisplay().workAreaSize;
-    mainWindow.setPosition(sw - 550 - 20, 20);
+    mainWindow.setPosition(sw - 1100 - 20, 20);
   }
   mainWindow.on("move", () => {
     if (!mainWindow) return;

@@ -7127,104 +7127,111 @@ function App() {
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-lg font-semibold text-blue-300", children: statusText }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-gray-400", children: "Please wait while we analyze your note." })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
-          sections.map((section, idx) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
-            section.summary && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-gray-800 border border-green-600/30 rounded p-3", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { className: "text-sm font-semibold text-green-400 mb-2 flex items-center gap-2", children: [
-                "⚡ Summary of Related Snippets from Your Old Stickies",
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-xs text-gray-500", children: [
-                  "(",
-                  section.summary.length,
-                  " chars)"
-                ] })
-              ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("hr", { className: "border-gray-600 mb-3 -mx-3" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                "p",
-                {
-                  className: "text-sm text-gray-300 leading-relaxed break-words whitespace-pre-line",
-                  dangerouslySetInnerHTML: { __html: formatBoldText(section.summary) }
-                }
-              )
-            ] }),
-            section.snippets.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { className: "text-sm font-semibold text-yellow-400 flex items-center gap-2", children: [
-                "🔍 Related Snippets from Your Stickies",
-                /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "bg-yellow-400/20 text-yellow-300 px-2 py-0.5 rounded text-xs", children: section.snippets.length })
-              ] }),
-              section.snippets.map((snippet) => {
-                const noteTitle = snippet.noteText ? extractNoteTitle(snippet.noteText) : snippet.stickyTitle;
-                const isFullContentExpanded = expandedSnippets.has(snippet.id);
-                const isSnippetContentExpanded = expandedSnippetContent.has(snippet.id);
-                console.log("🔍 [RENDERER] Raw snippet content:", JSON.stringify(snippet.content));
-                const snippetPreview = extractPreview(snippet.content);
-                console.log("🔍 [RENDERER] Processed snippet preview:", JSON.stringify(snippetPreview));
-                const shouldShowSnippetToggle = snippet.content.length > snippetPreview.length;
-                const fullContentPreview = snippet.noteText ? extractPreview(snippet.noteText) : "";
-                const shouldShowFullContentToggle = snippet.noteText && snippet.noteText.length > fullContentPreview.length;
-                return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "p-3 bg-white/10 border border-gray-600/30 rounded", children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mb-2", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-sm font-medium text-blue-400 flex items-center gap-1", children: [
-                    '🏴‍☠️ Sticky: "',
-                    noteTitle,
-                    '""'
-                  ] }) }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("hr", { className: "border-gray-600 mb-3 -mx-3" }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-3", children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsxs(
-                      "button",
-                      {
-                        onClick: () => toggleSnippetContentExpansion(snippet.id),
-                        className: "text-xs font-medium text-gray-400 hover:text-gray-300 mb-1 flex items-center gap-1",
-                        children: [
-                          isSnippetContentExpanded ? "▼" : "▶",
-                          " Snippet Text"
-                        ]
-                      }
-                    ),
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "p-2 bg-gray-800/60 rounded text-xs whitespace-pre-wrap font-sans overflow-x-auto", children: (() => {
-                      const displayContent = isSnippetContentExpanded ? snippet.content : snippetPreview;
-                      console.log("🖥️ [RENDERER] Content being displayed:", JSON.stringify(displayContent));
-                      console.log("🖥️ [RENDERER] Content char codes:", displayContent.split("").map((c) => c.charCodeAt(0)).join(","));
-                      return displayContent;
-                    })() }),
-                    shouldShowSnippetToggle && /* @__PURE__ */ jsxRuntimeExports.jsxs(
-                      "button",
-                      {
-                        onClick: () => toggleSnippetContentExpansion(snippet.id),
-                        className: "text-xs text-yellow-400 hover:text-yellow-300 flex items-center gap-1 mt-1",
-                        children: [
-                          isSnippetContentExpanded ? "▲" : "▶",
-                          " ",
-                          isSnippetContentExpanded ? "Show Less" : "Show More"
-                        ]
-                      }
-                    )
-                  ] }),
-                  snippet.noteText && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 hidden", children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "text-xs font-medium text-gray-400 mb-1", children: "Full Sticky Content" }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "p-2 bg-gray-800/60 rounded text-xs whitespace-pre-wrap font-sans overflow-x-auto", children: isFullContentExpanded ? snippet.noteText : fullContentPreview }),
-                    shouldShowFullContentToggle && /* @__PURE__ */ jsxRuntimeExports.jsxs(
-                      "button",
-                      {
-                        onClick: () => toggleSnippetExpansion(snippet.id),
-                        className: "text-xs text-yellow-400 hover:text-yellow-300 flex items-center gap-1 mt-1",
-                        children: [
-                          isFullContentExpanded ? "▼" : "▶",
-                          " ",
-                          isFullContentExpanded ? "Show Less" : "Show More"
-                        ]
-                      }
-                    )
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-4 h-full", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 space-y-6", children: [
+            sections.map((section, idx) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
+              section.summary && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-gray-800 border border-green-600/30 rounded p-3", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { className: "text-sm font-semibold text-green-400 mb-2 flex items-center gap-2", children: [
+                  "⚡ Summary of Related Snippets from Your Old Stickies",
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-xs text-gray-500", children: [
+                    "(",
+                    section.summary.length,
+                    " chars)"
                   ] })
-                ] }, snippet.id);
-              })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("hr", { className: "border-gray-600 mb-3 -mx-3" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "p",
+                  {
+                    className: "text-sm text-gray-300 leading-relaxed break-words whitespace-pre-line",
+                    dangerouslySetInnerHTML: { __html: formatBoldText(section.summary) }
+                  }
+                )
+              ] }),
+              section.snippets.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { className: "text-sm font-semibold text-yellow-400 flex items-center gap-2", children: [
+                  "🔍 Related Snippets from Your Stickies",
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "bg-yellow-400/20 text-yellow-300 px-2 py-0.5 rounded text-xs", children: section.snippets.length })
+                ] }),
+                section.snippets.map((snippet) => {
+                  const noteTitle = snippet.noteText ? extractNoteTitle(snippet.noteText) : snippet.stickyTitle;
+                  const isFullContentExpanded = expandedSnippets.has(snippet.id);
+                  const isSnippetContentExpanded = expandedSnippetContent.has(snippet.id);
+                  console.log("🔍 [RENDERER] Raw snippet content:", JSON.stringify(snippet.content));
+                  const snippetPreview = extractPreview(snippet.content);
+                  console.log("🔍 [RENDERER] Processed snippet preview:", JSON.stringify(snippetPreview));
+                  const shouldShowSnippetToggle = snippet.content.length > snippetPreview.length;
+                  const fullContentPreview = snippet.noteText ? extractPreview(snippet.noteText) : "";
+                  const shouldShowFullContentToggle = snippet.noteText && snippet.noteText.length > fullContentPreview.length;
+                  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "p-3 bg-white/10 border border-gray-600/30 rounded", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mb-2", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-sm font-medium text-blue-400 flex items-center gap-1", children: [
+                      '🏴‍☠️ Sticky: "',
+                      noteTitle,
+                      '""'
+                    ] }) }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("hr", { className: "border-gray-600 mb-3 -mx-3" }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-3", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                        "button",
+                        {
+                          onClick: () => toggleSnippetContentExpansion(snippet.id),
+                          className: "text-xs font-medium text-gray-400 hover:text-gray-300 mb-1 flex items-center gap-1",
+                          children: [
+                            isSnippetContentExpanded ? "▼" : "▶",
+                            " Snippet Text"
+                          ]
+                        }
+                      ),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "p-2 bg-gray-800/60 rounded text-xs whitespace-pre-wrap font-sans overflow-x-auto", children: (() => {
+                        const displayContent = isSnippetContentExpanded ? snippet.content : snippetPreview;
+                        console.log("🖥️ [RENDERER] Content being displayed:", JSON.stringify(displayContent));
+                        console.log("🖥️ [RENDERER] Content char codes:", displayContent.split("").map((c) => c.charCodeAt(0)).join(","));
+                        return displayContent;
+                      })() }),
+                      shouldShowSnippetToggle && /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                        "button",
+                        {
+                          onClick: () => toggleSnippetContentExpansion(snippet.id),
+                          className: "text-xs text-yellow-400 hover:text-yellow-300 flex items-center gap-1 mt-1",
+                          children: [
+                            isSnippetContentExpanded ? "▲" : "▶",
+                            " ",
+                            isSnippetContentExpanded ? "Show Less" : "Show More"
+                          ]
+                        }
+                      )
+                    ] }),
+                    snippet.noteText && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 hidden", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "text-xs font-medium text-gray-400 mb-1", children: "Full Sticky Content" }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "p-2 bg-gray-800/60 rounded text-xs whitespace-pre-wrap font-sans overflow-x-auto", children: isFullContentExpanded ? snippet.noteText : fullContentPreview }),
+                      shouldShowFullContentToggle && /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                        "button",
+                        {
+                          onClick: () => toggleSnippetExpansion(snippet.id),
+                          className: "text-xs text-yellow-400 hover:text-yellow-300 flex items-center gap-1 mt-1",
+                          children: [
+                            isFullContentExpanded ? "▼" : "▶",
+                            " ",
+                            isFullContentExpanded ? "Show Less" : "Show More"
+                          ]
+                        }
+                      )
+                    ] })
+                  ] }, snippet.id);
+                })
+              ] })
+            ] }, idx)),
+            sections.length === 0 && !isLoading && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-center text-gray-400 mt-8", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-2xl mb-2", children: "🧠" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm", children: "Welcome to Sticky Brain!" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs mt-2 max-w-xs mx-auto leading-relaxed", children: "Start typing thoughts in a Sticky and I'll grab relevant snippets from other Stickies of yours." })
             ] })
-          ] }, idx)),
-          sections.length === 0 && !isLoading && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-center text-gray-400 mt-8", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-2xl mb-2", children: "🧠" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm", children: "Welcome to Sticky Brain!" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs mt-2 max-w-xs mx-auto leading-relaxed", children: "Start typing thoughts in a Sticky and I'll grab relevant snippets from other Stickies of yours." })
-          ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex-1 border-l border-gray-700 pl-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-center text-gray-500 mt-8", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-2xl mb-2", children: "📝" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm", children: "Second Column" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs mt-2 max-w-xs mx-auto leading-relaxed", children: "This space is reserved for future features." })
+          ] }) })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-center" })
       ]

@@ -246,7 +246,7 @@ electron.app.whenReady().then(() => {
   console.log("[main] Starting watcher on Stickies dir:", stickiesDir);
   console.log("[main] Directory exists:", fs.existsSync(stickiesDir));
   startStickiesWatcher({ stickiesDir });
-  watcherEvents.on("input-paragraph", (payload) => {
+  watcherEvents.on("input-paragraph", async (payload) => {
     mainWindow?.webContents.send("rag-started");
     setBusy(true);
     if (workerProcess?.killed === false) {
@@ -276,12 +276,23 @@ electron.app.whenReady().then(() => {
       }
       setBusy(false);
     });
+    let userGoals = "";
+    try {
+      if (fs.existsSync(userGoalsPath)) {
+        userGoals = fs.readFileSync(userGoalsPath, "utf-8");
+        console.log("[MAIN] Loaded user goals for RAG pipeline:", userGoals.substring(0, 100));
+      }
+    } catch (error) {
+      console.warn("[MAIN] Failed to load user goals for RAG pipeline:", error);
+    }
     payload.text;
     console.log("📁 [MAIN] Current sticky file path:", payload.filePath);
+    console.log("🎯 [MAIN] User goals being sent to worker:", userGoals.substring(0, 100));
     workerProcess.send({
       type: "run",
       paragraph: payload.text,
-      currentFilePath: payload.filePath
+      currentFilePath: payload.filePath,
+      userGoals
     });
   });
   electron.app.on("activate", () => {

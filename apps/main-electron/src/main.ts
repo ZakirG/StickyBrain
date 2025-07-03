@@ -187,7 +187,7 @@ app.whenReady().then(() => {
   console.log('[main] Directory exists:', fs.existsSync(stickiesDir));
   startStickiesWatcher({ stickiesDir });
 
-  watcherEvents.on('input-paragraph', (payload) => {
+  watcherEvents.on('input-paragraph', async (payload) => {
     // Notify UI that we are starting
     mainWindow?.webContents.send('rag-started');
     
@@ -225,12 +225,25 @@ app.whenReady().then(() => {
       setBusy(false);
     });
     
+    // Load user goals to pass to the worker
+    let userGoals = '';
+    try {
+      if (fs.existsSync(userGoalsPath)) {
+        userGoals = fs.readFileSync(userGoalsPath, 'utf-8');
+        console.log('[MAIN] Loaded user goals for RAG pipeline:', userGoals.substring(0, 100));
+      }
+    } catch (error) {
+      console.warn('[MAIN] Failed to load user goals for RAG pipeline:', error);
+    }
+    
     lastParagraph = payload.text;
     console.log('📁 [MAIN] Current sticky file path:', payload.filePath);
+    console.log('🎯 [MAIN] User goals being sent to worker:', userGoals.substring(0, 100));
     workerProcess.send({ 
       type: 'run', 
       paragraph: payload.text, 
-      currentFilePath: payload.filePath 
+      currentFilePath: payload.filePath,
+      userGoals: userGoals
     });
   });
 

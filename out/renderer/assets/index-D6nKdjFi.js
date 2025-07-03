@@ -7011,7 +7011,7 @@ function App() {
   const [expandedSnippetContent, setExpandedSnippetContent] = reactExports.useState(/* @__PURE__ */ new Set());
   const [userGoals, setUserGoals] = reactExports.useState("");
   const [isGoalsSaving, setIsGoalsSaving] = reactExports.useState(false);
-  const [isGoalsPanelCollapsed, setIsGoalsPanelCollapsed] = reactExports.useState(false);
+  const [isGoalsPanelCollapsed, setIsGoalsPanelCollapsed] = reactExports.useState(true);
   reactExports.useEffect(() => {
     console.log("🎨 [RENDERER] App component mounted");
     console.log("🔌 [RENDERER] Setting up IPC listeners...");
@@ -7167,7 +7167,7 @@ function App() {
                 value: userGoals,
                 onChange: (e) => setUserGoals(e.target.value),
                 placeholder: "Enter your goals here.",
-                className: "w-full h-20 bg-gray-900 border border-gray-600 rounded px-3 py-2 text-gray-300 text-sm resize-none focus:outline-none focus:border-blue-500"
+                className: "w-full h-64 bg-gray-900 border border-gray-600 rounded px-3 py-2 text-gray-300 text-sm resize-none focus:outline-none focus:border-blue-500"
               }
             ),
             /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex justify-end", children: /* @__PURE__ */ jsxRuntimeExports.jsx(

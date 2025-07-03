@@ -117,7 +117,7 @@ function App() {
   const [expandedSnippetContent, setExpandedSnippetContent] = useState<Set<string>>(new Set());
   const [userGoals, setUserGoals] = useState<string>('');
   const [isGoalsSaving, setIsGoalsSaving] = useState(false);
-  const [isGoalsPanelCollapsed, setIsGoalsPanelCollapsed] = useState(false);
+  const [isGoalsPanelCollapsed, setIsGoalsPanelCollapsed] = useState(true);
 
   useEffect(() => {
     console.log('🎨 [RENDERER] App component mounted');
@@ -291,7 +291,7 @@ function App() {
                 value={userGoals}
                 onChange={(e) => setUserGoals(e.target.value)}
                 placeholder="Enter your goals here."
-                className="w-full h-20 bg-gray-900 border border-gray-600 rounded px-3 py-2 text-gray-300 text-sm resize-none focus:outline-none focus:border-blue-500"
+                className="w-full h-64 bg-gray-900 border border-gray-600 rounded px-3 py-2 text-gray-300 text-sm resize-none focus:outline-none focus:border-blue-500"
               />
               <div className="flex justify-end">
                 <button

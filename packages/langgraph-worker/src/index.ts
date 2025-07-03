@@ -178,6 +178,7 @@ const RagStateAnnotation = Annotation.Root({
   // Input
   paragraphText: Annotation<string>,
   currentFilePath: Annotation<string>,
+  userGoals: Annotation<string>,
   
   // Configuration
   openai: Annotation<OpenAI>,
@@ -296,7 +297,7 @@ async function retrieveNode(state: RagState): Promise<Partial<RagState>> {
     }
   }
 
-  const k = 8;
+  const k = 10;
   console.log('📊 [RETRIEVE NODE] Querying for top', k, 'similar results');
   let queryResult: any;
   try {
@@ -448,7 +449,7 @@ async function summariseNode(state: RagState): Promise<Partial<RagState>> {
 async function webSearchPromptGeneratorNode(state: RagState): Promise<Partial<RagState>> {
   console.log('🔍 [WEB SEARCH NODE] Generating web search prompt...');
   
-  const webSearchPrompt = await generateWebSearchPrompt(state.paragraphText, state.openai);
+  const webSearchPrompt = await generateWebSearchPrompt(state.paragraphText, state.userGoals, state.openai);
   console.log('✅ [WEB SEARCH NODE] Web search prompt generated:', webSearchPrompt.substring(0, 100) + '...');
 
   return {
@@ -545,34 +546,41 @@ async function generateSummary(paragraph: string, snippets: Snippet[], openai: O
 /**
  * Generate web search prompt using OpenAI or fallback
  */
-async function generateWebSearchPrompt(paragraph: string, openai: OpenAI): Promise<string> {
+async function generateWebSearchPrompt(paragraph: string, userGoals: string, openai: OpenAI): Promise<string> {
   // Use OpenAI if we have an API key OR if we're in test mode with a mocked instance
   const shouldUseOpenAI = process.env.OPENAI_API_KEY || process.env.NODE_ENV === 'test';
   
   if (shouldUseOpenAI) {
     try {
-      const prompt = `You are an AI assistant that helps generate effective web search queries. Based on what the user is currently typing or thinking about, create 3-5 specific, targeted web search queries that would help them find relevant information online.
-
-The user is currently writing: "${paragraph}"
-
-Generate web search queries that would help them:
-1. Find specific information related to their current topic
-2. Discover relevant resources, tools, or examples
-3. Get expert insights or recent developments in this area
-4. Find practical guidance or how-to information
-
-Format your response as a simple list of search queries, one per line. Instead of bullet points use single dashes "-". Make each query specific and actionable. Focus on what would be most helpful for someone thinking about this topic right now.
-
-Example format:
-how to build mobile apps for beginners 2024
-best mobile app development frameworks comparison
-mobile app monetization strategies small developers
-app store optimization techniques 2024
-successful indie app developer case studies`;
+      const goalsContext = userGoals.trim() 
+        ? `\n\nThe user's personal goals are: "${userGoals}"\n\nKeep these goals in mind when generating search queries - help them find information that aligns with their objectives and supports their current work.`
+        : '';
       
+      const prompt = `Let's roleplay. You are an unusual and rebellious teenager that comes up with wild Google searches to help your big brother do research. Your big brother puts food on the table, and the results of his research might feed your family, if you suggest good informative clever creative rebellious think-outside-the-box web searches. We're greedy for success. You will be provided your big brother's goals and what he's currently thinking about. 
+      Your task is to quietly watch his thinking and come up with ideas for web searches to gather information spontaneously that might help him. He's very smart, so if you make generic bullshit web searches, you'll only be wasting his time. Instead, use your unique rebellious outside-the-box greedy hungry perspective to come up with web searches that gather rare, obscure information that benefits his current thought process and helps him achieve one or more of his larger personal goals.
+      Return 3-5 specific, targeted web search queries that satisfy the above requirements.
+
+      Here's what your big brother is currently typing: "${paragraph}"${goalsContext}
+
+      And here's his larger personal goals, which he must achieve at any cost:
+      ${userGoals}
+      
+      Reply only with the web searches, no other text. Use single dashes "-", not bullet points nor numbers.
+      Use plain text, no markdown.
+      Example format:
+      - insane mobile apps 2025
+      - highest selling iphone apps 2025
+      - best apps to get crazy jacked 2025
+      - best texting apps for insane rizz
+      - how to come up with app ideas fast
+
+      The focus of your web searches should be to gather unique information that could help spark your big brother's creativity based on what he's currently typing that helps him meet his larger goals. Return less than 5 web search options.
+      `;
+      
+      console.log('\n\n\n\n>> Web search prompt:', prompt);
       const response = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        max_tokens: 300,
+        model: 'gpt-4.1-2025-04-14',
+        max_tokens: 600,
         messages: [
           { role: 'system', content: 'You are a helpful assistant that generates targeted web search queries.' },
           { role: 'user', content: prompt },
@@ -587,7 +595,9 @@ successful indie app developer case studies`;
   
   // Fallback web search prompt
   console.log('🔄 [WORKER] Using fallback web search prompt generation');
-  return `Search suggestions based on: "${paragraph.substring(0, 50)}${paragraph.length > 50 ? '...' : ''}"
+  const goalsNote = userGoals.trim() ? `\n\nNote: Consider your goals: ${userGoals.substring(0, 100)}${userGoals.length > 100 ? '...' : ''}` : '';
+  
+  return `Search suggestions based on: "${paragraph.substring(0, 50)}${paragraph.length > 50 ? '...' : ''}"${goalsNote}
 
 Try searching for:
 - ${paragraph.split(' ').slice(0, 3).join(' ')} tutorial
@@ -604,6 +614,7 @@ export async function runRagPipeline(paragraph: string, options?: {
   chromaClient?: any;
   similarityThreshold?: number;
   currentFilePath?: string;
+  userGoals?: string;
 }): Promise<PipelineResult> {
   console.log('🚀 [WORKER] Starting LangGraph RAG pipeline');
   
@@ -611,12 +622,14 @@ export async function runRagPipeline(paragraph: string, options?: {
   const chromaClient = options?.chromaClient || (await getChromaClient({}));
   const similarityThreshold = options?.similarityThreshold ?? 0.3;
   const currentFilePath = options?.currentFilePath || '';
+  const userGoals = options?.userGoals || '';
 
   console.log('🔧 [WORKER] Configuration:');
   console.log('  - OpenAI available:', !!openai);
   console.log('  - ChromaDB client type:', chromaClient.constructor.name);
   console.log('  - Similarity threshold:', similarityThreshold);
   console.log('  - Current file path:', currentFilePath);
+  console.log('  - User goals:', userGoals);
 
   // Create the LangGraph StateGraph
   const workflow = new StateGraph(RagStateAnnotation)
@@ -643,6 +656,7 @@ export async function runRagPipeline(paragraph: string, options?: {
   const initialState: RagState = {
     paragraphText: paragraph,
     currentFilePath,
+    userGoals,
     openai,
     chromaClient,
     similarityThreshold,
@@ -677,7 +691,8 @@ if (process.argv.includes('--child')) {
       console.log('📁 [WORKER] Current file path from message:', msg.currentFilePath);
       try {
         const result = await runRagPipeline(msg.paragraph, {
-          currentFilePath: msg.currentFilePath
+          currentFilePath: msg.currentFilePath,
+          userGoals: msg.userGoals
         });
         process.send?.({ type: 'result', result });
       } catch (error) {

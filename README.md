@@ -1,6 +1,6 @@
 # StickyBrain
 
-A macOS application that provides AI-powered context from your Stickies notes while you write. StickyBrain uses RAG (Retrieval-Augmented Generation) to surface relevant content from your existing Stickies notes in a floating window as you type.
+A macOS application that provides AI-powered context from your Stickies notes while you write. StickyBrain uses RAG (Retrieval-Augmented Generation) combined with intelligent web research to surface relevant content from your existing Stickies notes in a floating window as you type.
 
 ## LangGraph Implementation
 
@@ -12,7 +12,7 @@ The pipeline features real-time incremental updates, sending results to the UI a
 
 ## Quick Setup for macOS Stickies
 
-### 1. Start ChromaDB Server
+### 1. Start ChromaDB Server (Optional)
 
 For persistent vector storage and optimal performance with large Stickies collections:
 
@@ -26,7 +26,7 @@ curl http://localhost:8000/api/v1/version
 
 ### 2. Configure Environment
 
-Add to your `.env.local` file in the project root:
+Create `.env.local` file in the project root:
 
 ```bash
 # Required: OpenAI API key for embeddings and summaries
@@ -34,6 +34,9 @@ OPENAI_API_KEY=sk-your-key-here
 
 # Optional: ChromaDB server URL (uses in-memory storage if not set)
 CHROMA_URL=http://localhost:8000
+
+# Optional: Brave API key for enhanced web search (fallback to DuckDuckGo)
+BRAVE_API_KEY=your-brave-api-key
 ```
 
 ### 3. Index Your Stickies
@@ -41,6 +44,9 @@ CHROMA_URL=http://localhost:8000
 Index your existing macOS Stickies for RAG retrieval:
 
 ```bash
+# Install dependencies
+pnpm install
+
 # Index your actual macOS Stickies (recommended)
 pnpm index-stickies "/Users/$(whoami)/Library/Containers/com.apple.Stickies/Data/Library/Stickies"
 
@@ -53,7 +59,10 @@ This will process all your `.rtfd` Stickies files, extract text, generate OpenAI
 ### 4. Run the App
 
 ```bash
-# Start development mode
+# Start development mode with full rebuild (recommended)
+pnpm dev:full
+
+# Or start regular development mode
 pnpm dev
 ```
 
@@ -61,11 +70,31 @@ The app will watch your Stickies directory and provide AI-powered context as you
 
 ## Features
 
-- **Floating Window**: Translucent window that stays on top while you work
-- **Real-time Analysis**: Automatically processes your Stickies content as you type
-- **Vector Search**: Uses ChromaDB for semantic similarity search
-- **AI Summarization**: GPT-powered summaries connecting your current thoughts with past notes
-- **Privacy-First**: All processing happens locally with ChromaDB
+### Core Features
+- **Floating Window**: Frameless black window that stays positioned where you place it
+- **Two-Column Layout**: RAG results on the left, web search suggestions and results on the right
+- **Real-time Analysis**: Automatically processes your Stickies content as you type with incremental updates
+- **Vector Search**: Uses ChromaDB for semantic similarity search with 0.3 similarity threshold
+- **Smart Filtering**: Excludes content from your currently active sticky to avoid redundancy
+
+### AI-Powered Intelligence
+- **RAG Summarization**: GPT-4.1 creates focused summaries connecting your current thoughts with past notes
+- **Web Research**: Automatically generates and executes 3 targeted web search queries
+- **Page Selection**: AI chooses the 2 most valuable web pages for detailed analysis
+- **Content Scraping**: Extracts readable text from selected web pages
+- **StickyBrain Synthesis**: Combines RAG insights with web research into a single focused insight
+
+### User Experience
+- **User Goals**: Collapsible panel to set personal goals that influence AI suggestions
+- **Incremental Updates**: See results appear in real-time as each processing stage completes
+- **Manual Controls**: Refresh button, Run Embeddings button, and Clear button for manual control
+- **Expandable Content**: Click to expand/collapse snippet content and web page details
+- **Position Memory**: Window remembers its last position on screen
+
+### Technical Features
+- **Dual-Path Processing**: RAG and web search pipelines run in parallel for faster results
+- **Robust Fallbacks**: Graceful degradation when APIs are unavailable
+- **Privacy-First**: All RAG processing happens locally with your ChromaDB instance
 
 ## Requirements
 
@@ -73,9 +102,10 @@ The app will watch your Stickies directory and provide AI-powered context as you
 - Node.js 18+
 - pnpm package manager
 - OpenAI API key
-- Docker (for ChromaDB server)
+- Docker (optional, for ChromaDB server)
+- Brave API key (optional, for enhanced web search)
 
-## Install
+## Installation
 
 ```bash
 # Clone the repository
@@ -86,8 +116,8 @@ cd FlowGenius
 pnpm install
 
 # Set up environment variables
-cp .env.example .env
-# Edit .env and add your OpenAI API key
+cp .env.example .env.local
+# Edit .env.local and add your API keys
 ```
 
 ## Index Stickies
@@ -95,28 +125,38 @@ cp .env.example .env
 Before using the app, you need to index your existing Stickies:
 
 ```bash
-# Index all Stickies notes
-pnpm index-stickies
+# Index all Stickies notes from default macOS location
+pnpm index-stickies "/Users/$(whoami)/Library/Containers/com.apple.Stickies/Data/Library/Stickies"
 
 # Or index from a custom directory
 pnpm index-stickies /path/to/stickies
+
+# Or use test stickies for development
+pnpm index-stickies
 ```
 
 This will:
-- Extract text from your .rtfd Stickies files
-- Split content into paragraphs
+- Extract text from your .rtfd Stickies files using RTF parsing
+- Split content into paragraphs and extract titles
 - Generate embeddings using OpenAI's text-embedding-3-small model
-- Store everything in a local ChromaDB collection
+- Store everything in a ChromaDB collection named 'stickies_rag_v1'
 
-## Run Dev
+## Development
 
 ```bash
+# Full development mode (recommended) - rebuilds everything
 pnpm dev:full
+
+# Regular development mode
+pnpm dev
+
+# Production development mode
+pnpm dev:prod
 ```
 
-This command performs a complete rebuild of all packages and starts the development server. It ensures all TypeScript code changes propagate properly by cleaning build caches and rebuilding everything from scratch.
+The `dev:full` command performs a complete rebuild of all packages and starts the development server, ensuring all TypeScript code changes propagate properly.
 
-## Package
+## Building and Packaging
 
 ```bash
 # Build the application
@@ -126,16 +166,33 @@ pnpm build
 pnpm make
 ```
 
-This will create a .dmg file in the `out` directory.
+This will create a .dmg file in the `out` directory for macOS distribution.
 
 ## How It Works
 
-1. **File Watching**: Monitors your Stickies directory for changes
-2. **Text Processing**: Extracts and processes new content when you type
-3. **Embedding**: Creates vector embeddings of your paragraph text
-4. **Retrieval**: Searches your indexed Stickies for similar content
-5. **Summarization**: GPT analyzes connections between current and past content
-6. **Display**: Shows relevant snippets and insights in the floating window
+### File Watching and Triggering
+1. **File Monitoring**: Monitors your Stickies directory using chokidar for changes
+2. **Debounced Processing**: Waits 200ms after changes, then diffs content
+3. **Smart Triggering**: Only processes when sentences end (., !, ?, or newline)
+4. **Concurrency Control**: Prevents overlapping requests with busy state management
+
+### LangGraph Pipeline
+1. **Input Processing**: Loads paragraph text, user goals, and current file path
+2. **Embedding Generation**: Creates vector embeddings using OpenAI
+3. **Vector Retrieval**: Searches ChromaDB for top 10 similar content pieces
+4. **Smart Filtering**: Excludes current sticky, applies similarity threshold (0.3)
+5. **RAG Summarization**: GPT-4.1 creates focused summary of related snippets
+6. **Web Query Generation**: Creates 3 targeted web search queries in parallel
+7. **Web Search Execution**: Searches via Brave API with DuckDuckGo fallback
+8. **Page Selection**: AI selects 2 most valuable pages for detailed analysis
+9. **Content Scraping**: Extracts readable text using axios and cheerio
+10. **Page Summarization**: Creates focused summaries of scraped content
+11. **Final Synthesis**: Combines RAG and web insights into single recommendation
+
+### Real-time UI Updates
+- **Incremental Display**: Results appear as each pipeline stage completes
+- **Two-Column Layout**: RAG results (left) and web research (right)
+- **Expandable Sections**: Click to view full content, scraped pages, etc.
 
 ## Troubleshooting
 
@@ -146,7 +203,7 @@ If you see a security warning when running the app:
 3. The app will remember this choice for future launches
 
 ### Missing OpenAI Key
-Make sure your `.env` file contains a valid OpenAI API key:
+Make sure your `.env.local` file contains a valid OpenAI API key:
 ```
 OPENAI_API_KEY=sk-your-key-here
 ```
@@ -156,39 +213,48 @@ OPENAI_API_KEY=sk-your-key-here
    ```bash
    pnpm index-stickies "/Users/$(whoami)/Library/Containers/com.apple.Stickies/Data/Library/Stickies"
    ```
-2. Check that ChromaDB server is running: `docker ps | grep chromadb`
-3. Verify your `.env.local` contains `CHROMA_URL=http://localhost:8000`
-4. Check that your Stickies directory exists and contains .rtfd files
-5. Try the manual Refresh button in the app
+2. Check that ChromaDB is available (server running or in-memory mode working)
+3. Verify your Stickies directory exists and contains .rtfd files
+4. Try the manual Refresh button in the app
+5. Check the Run Embeddings button to reindex if needed
 
 ### ChromaDB Connection Issues
-If you see "ChromaDB server not available" errors:
+If you see ChromaDB errors:
 1. Start the server: `docker run -d -p 8000:8000 --name chromadb chromadb/chroma`
 2. If container exists: `docker start chromadb`
 3. Check server status: `curl http://localhost:8000/api/v1/version`
+4. Or remove CHROMA_URL from .env.local to use in-memory mode
+
+### Web Search Not Working
+1. Add BRAVE_API_KEY to .env.local for best results
+2. DuckDuckGo fallback should work without API key
+3. Check console logs for API rate limiting or errors
 
 ### Performance with Large Collections
 For 1000+ stickies:
 - Indexing may take 10-30 minutes depending on content size
-- Consider running ChromaDB server for better performance
+- Consider using ChromaDB server for better performance
 - Monitor OpenAI API usage during indexing
 
-## Development
+## Development Architecture
 
 This is a monorepo with the following structure:
 
-- `apps/main-electron/` - Electron main process
-- `apps/renderer/` - React frontend
-- `packages/chroma-indexer/` - Stickies indexing CLI
-- `packages/langgraph-worker/` - RAG pipeline worker
+- `apps/main-electron/` - Electron main process with file watching and IPC
+- `apps/renderer/` - React frontend with two-column layout and real-time updates
+- `packages/chroma-indexer/` - Stickies indexing CLI with RTF parsing
+- `packages/langgraph-worker/` - RAG pipeline worker with 11-node LangGraph implementation
 
-### Architecture
+### Tech Stack
 
 - **Electron**: Provides the floating window and file system access
-- **React + Tailwind**: Modern UI components and styling
-- **ChromaDB**: Local vector database for embeddings
-- **LangGraph**: Orchestrates the RAG pipeline
-- **OpenAI**: Embeddings and text generation
+- **React + Tailwind**: Modern UI components with responsive two-column layout
+- **ChromaDB**: Local or remote vector database for embeddings
+- **LangGraph**: Orchestrates the sophisticated RAG + web research pipeline
+- **OpenAI**: GPT-4.1 for embeddings, summarization, and synthesis
+- **Brave API + DuckDuckGo**: Web search with intelligent fallbacks
+- **Chokidar**: File system watching with debouncing
+- **TypeScript**: Type safety across the entire monorepo
 
 ## Contributing
 
@@ -200,4 +266,4 @@ This is a monorepo with the following structure:
 
 ## License
 
-MIT License - see LICENSE file for details # FlowGenius
+MIT License - see LICENSE file for details

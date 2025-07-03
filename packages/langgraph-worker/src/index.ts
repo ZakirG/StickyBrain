@@ -740,9 +740,9 @@ async function generateSummary(paragraph: string, snippets: Snippet[], userGoals
 
       In your summary, do not mention any quotes that might contain sensitive information or curse words or embarrassing personal information because this technology will be shown in a tech demo.
       
-      Once again -- if the user is brainstorming app ideas, the most valuable information that your response must start with is SPECIFIC app ideas that they have written. Another example: If the user is writing 'What kind of song should I make?' then you should be specifically reminding them of old songs ideas they wanted to make in the past. Not sharing unrelated tips and tricks. Specifically address EXACTLY what they're thinking about. Extract ONLY the most useful information from the retrieved snippets. Put the MOST VALUABLE INFORMATION at the top of your response. Please bold the most valuable parts of your response. For example, if the user is trying to come up with app ideas, then the name of the apps that they have ideas for should be bolded. This is what the user is currently typing and thinking about:\n\n"${paragraph}"
+      For example, if the user is brainstorming app ideas, the most valuable information that your response must start with is SPECIFIC app ideas that they have written. Another example: If the user is writing 'What kind of song should I make?' then you should be specifically reminding them of old songs ideas they wanted to make in the past. Not sharing unrelated tips and tricks. Specifically address EXACTLY what they're thinking about. Extract ONLY the most useful information from the retrieved snippets and OMIT EVERYTHING ELSE. Put the MOST VALUABLE INFORMATION at the top of your response. This is what the user is currently typing and thinking about:\n\n"${paragraph}"
 
-      Your summary should also highlight specific information that helps the user achieve their overarching personal goals, which they have written below:
+      When you suggest information that is relevant to what the user has typed, keep in mind that they have entered these personal goals for themselves below:
       ${userGoals.trim()}
       
       
@@ -787,7 +787,7 @@ async function generateWebSearchPrompt(paragraph: string, userGoals: string, ope
       All of your web search suggestions should be DIRECTLY relevant to what the user is currently typing.
       Here's what the user is currently typing and thinking about: "${paragraph}"
 
-      And here's the user's larger personal goals which might inform the ideas you come up with:
+      And here's the user's larger personal goals, which may or may not be relevant to what they're currently typing. They might inform the ideas you come up with. User goals:
       "${userGoals}"
       
       Reply only with the web searches, no other text. Use single dashes "-", not bullet points nor numbers.
@@ -797,9 +797,9 @@ async function generateWebSearchPrompt(paragraph: string, userGoals: string, ope
       - highest selling iphone apps 2025
       - how to come up with SaaS app ideas?
 
-      The focus of your web searches should be to gather unique information that could help spark your big brother's creativity based on what he's currently typing that helps him meet his larger goals. Return 3 web search options. All of your web search suggestions should be DIRECTLY relevant to what he's currently typing.
+      The focus of your web searches should be to gather unique information that could help spark the user's creativity based on what he's currently typing. If you can come up with web searches related to both the current thought and some overarching personal goal, that's a bonus, but don't stretch it. Sometimes you'll need to ignore the personal goals and just focus on what the user is currently typing as the source of inspiration. Return 3 web search options. All of your web search suggestions should be DIRECTLY relevant to what he's currently typing.
       Don't search for stupid vague things like "app ideas nobody has thought of yet", because obviously,
-      tautologically, that's not gonna return useful information. DUHHHH. So instead, come up with clever ideas that complement what your big bro has typed in specific and concrete creative ways that match his unique goals.
+      tautologically, that's not gonna return useful information. DUHHHH. So instead, come up with clever ideas that complement what the user has typed and would be immediately useful to him in the moment.
       `;
       
       const response = await openai.chat.completions.create({
@@ -1059,29 +1059,19 @@ async function generateWebPageSummary(
   
   if (shouldUseOpenAI) {
     try {
-      const prompt = `You are an AI assistant helping a user research information related to what they're currently writing. The user is working on: "${userParagraph}"
+      const prompt = `You are an AI assistant helping a user brainstorm ideas and obtain information related to what they're currently typing and thinking about. You will see what is on the user's mind, then you will see the contents of a web page, and you will extract ONLY the information from that webpage that might be DIRECTLY relevant to what the user is currently thinking about, in a way that helps them achieve their stated personal goals.
+      
+      Here is what the user most recently typed and thought about: "${userParagraph}"
 
-The user has these personal goals:
-${userGoals.trim()}
+    Here are the user's stated personal goals:
+    ${userGoals.trim()}
 
-You have been given the full text content from a web page titled "${pageTitle}" (${pageUrl}). Your task is to create a concise 3-sentence summary that:
+    You will be given the content of this webpage: "${pageTitle}" (${pageUrl}).
+    Focus on information most relevant to what the user is currently thinking about.
+    Use plain text format, no markdown or special formatting. Keep in mind the user's stated personal goals as far as which information you choose to extract. Write with concise language, DO NOT BE VERBOSE, be EXTREMELY succinct. Every token counts. Instead of saying "The page suggests x" or "The guide emphasizes x" in your summaries, say "One suggestion provided is x" or "One idea is x".
 
-1. Identifies the most important information relevant to the user's current work and goals
-2. Includes direct quotations from the page to support key points
-3. Focuses on actionable insights or specific details
-
-Requirements:
-- Write exactly 3 sentences, no more, no less
-- Include at least one direct quotation from the page text in quotation marks
-- Focus on information most relevant to what the user is writing about
-- Use plain text format, no markdown or special formatting
-- If the page content is not relevant, briefly explain why in 3 sentences
-
-Here is the full text content from the web page:
-
-${scrapedContent}
-
-Provide your 3-sentence summary:`;
+    Here is the full text content from the web page:
+    ${scrapedContent}`;
       
       const response = await openai.chat.completions.create({
         model: 'gpt-4.1-2025-04-14',

@@ -438,16 +438,17 @@ function App() {
             {sections.map((section, idx) => (
               <div key={idx} className="space-y-3">
                 {section.summary && (
-                  <div className="bg-gray-800 border border-green-600/30 rounded p-3">
+                  <div className="space-y-3">
                     <h2 className="text-sm font-semibold text-green-400 mb-2 flex items-center gap-2">
-                    ⚡ Summary of Related Snippets from Your Old Stickies
-                      <span className="text-xs text-gray-500">({section.summary.length} chars)</span>
+                      ⚡ Summary of Related Snippets from Your Old Stickies
+                      
                     </h2>
-                    <hr className="border-gray-600 mb-3 -mx-3" />
-                    <p 
-                      className="text-sm text-gray-300 leading-relaxed break-words whitespace-pre-line"
-                      dangerouslySetInnerHTML={{ __html: formatBoldText(section.summary) }}
-                    ></p>
+                    <div className="bg-gray-800 border border-green-600/30 rounded p-3">
+                      <p 
+                        className="text-sm text-gray-300 leading-relaxed break-words whitespace-pre-line"
+                        dangerouslySetInnerHTML={{ __html: formatBoldText(section.summary) }}
+                      ></p>
+                    </div>
                   </div>
                 )}
 
@@ -547,6 +548,41 @@ function App() {
           <div className="flex-1 border-l border-gray-700 pl-4 min-w-0 overflow-y-auto">
             {sections.length > 0 && (sections[0].webSearchPrompt || sections[0].webSearchResults) ? (
               <div className="space-y-4">
+                {/* Web Research Summary Section */}
+                {sections[0].webSearchResults && sections[0].webSearchResults.some(result => result.pageSummary) && (
+                  <div className="space-y-3">
+                    <h2 className="text-sm font-semibold text-green-400 flex items-center gap-2">
+                      🌐 Web Research Summary
+                      <span className="text-xs text-gray-500">
+                        ({sections[0].webSearchResults.filter(result => result.pageSummary).length} pages)
+                      </span>
+                    </h2>
+                    <div className="bg-gray-800 border border-green-600/30 rounded p-3 space-y-4">
+                      {(() => {
+                        const summariesWithResults = sections[0].webSearchResults.filter(result => result.pageSummary);
+                        return summariesWithResults.map((result, index) => (
+                          <div key={`summary-${result.url}-${index}`}>
+                            <p className="text-sm text-gray-300 leading-relaxed break-words whitespace-pre-line mb-2">
+                              {result.pageSummary}
+                            </p>
+                            <a 
+                              href={result.url} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-xs text-blue-400 hover:text-blue-300 break-all"
+                            >
+                              {result.url}
+                            </a>
+                            {index < summariesWithResults.length - 1 && (
+                              <hr className="border-gray-600 mt-3" />
+                            )}
+                          </div>
+                        ));
+                      })()}
+                    </div>
+                  </div>
+                )}
+
                 {sections[0].webSearchPrompt && (
                   <div className="space-y-3">
                     <h2 className="text-sm font-semibold text-green-400 flex items-center gap-2">

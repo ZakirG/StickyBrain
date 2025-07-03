@@ -7257,23 +7257,15 @@ function App() {
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-4 h-full overflow-hidden", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 space-y-6 min-w-0 overflow-y-auto", children: [
             sections.map((section, idx) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
-              section.summary && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-gray-800 border border-green-600/30 rounded p-3", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { className: "text-sm font-semibold text-green-400 mb-2 flex items-center gap-2", children: [
-                  "⚡ Summary of Related Snippets from Your Old Stickies",
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-xs text-gray-500", children: [
-                    "(",
-                    section.summary.length,
-                    " chars)"
-                  ] })
-                ] }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("hr", { className: "border-gray-600 mb-3 -mx-3" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(
+              section.summary && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-sm font-semibold text-green-400 mb-2 flex items-center gap-2", children: "⚡ Summary of Related Snippets from Your Old Stickies" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bg-gray-800 border border-green-600/30 rounded p-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
                   "p",
                   {
                     className: "text-sm text-gray-300 leading-relaxed break-words whitespace-pre-line",
                     dangerouslySetInnerHTML: { __html: formatBoldText(section.summary) }
                   }
-                )
+                ) })
               ] }),
               section.snippets.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { className: "text-sm font-semibold text-yellow-400 flex items-center gap-2", children: [
@@ -7355,6 +7347,33 @@ function App() {
             ] })
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex-1 border-l border-gray-700 pl-4 min-w-0 overflow-y-auto", children: sections.length > 0 && (sections[0].webSearchPrompt || sections[0].webSearchResults) ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
+            sections[0].webSearchResults && sections[0].webSearchResults.some((result) => result.pageSummary) && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { className: "text-sm font-semibold text-green-400 flex items-center gap-2", children: [
+                "🌐 Web Research Summary",
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-xs text-gray-500", children: [
+                  "(",
+                  sections[0].webSearchResults.filter((result) => result.pageSummary).length,
+                  " pages)"
+                ] })
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bg-gray-800 border border-green-600/30 rounded p-3 space-y-4", children: (() => {
+                const summariesWithResults = sections[0].webSearchResults.filter((result) => result.pageSummary);
+                return summariesWithResults.map((result, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-gray-300 leading-relaxed break-words whitespace-pre-line mb-2", children: result.pageSummary }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(
+                    "a",
+                    {
+                      href: result.url,
+                      target: "_blank",
+                      rel: "noopener noreferrer",
+                      className: "text-xs text-blue-400 hover:text-blue-300 break-all",
+                      children: result.url
+                    }
+                  ),
+                  index < summariesWithResults.length - 1 && /* @__PURE__ */ jsxRuntimeExports.jsx("hr", { className: "border-gray-600 mt-3" })
+                ] }, `summary-${result.url}-${index}`));
+              })() })
+            ] }),
             sections[0].webSearchPrompt && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-sm font-semibold text-green-400 flex items-center gap-2", children: "🔍 Suggested Web Searches" }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-gray-800 border border-purple-600/30 rounded p-3", children: [

@@ -2,6 +2,14 @@
 
 A macOS application that provides AI-powered context from your Stickies notes while you write. StickyBrain uses RAG (Retrieval-Augmented Generation) to surface relevant content from your existing Stickies notes in a floating window as you type.
 
+## LangGraph Implementation
+
+![LangGraph Flow Diagram](langgraph-flow-diagram-submission-2.png)
+
+StickyBrain's core intelligence is powered by a sophisticated LangGraph implementation that orchestrates an 11-node pipeline combining local RAG retrieval with intelligent web research. When you type in a Sticky note, the system triggers a dual-path execution model: the RAG pipeline processes your input through embedding generation, ChromaDB similarity search, and content filtering, while simultaneously generating targeted web search queries that are executed through Brave API and DuckDuckGo.
+
+The pipeline features real-time incremental updates, sending results to the UI after each major processing stage to provide immediate feedback. Advanced filtering excludes content from your currently active sticky while intelligently including title vectors regardless of similarity thresholds. The system culminates in a "StickyBrain Synthesis" node that combines insights from both your historical notes and live web research into a single, focused insight delivered to your floating window. This architecture ensures comprehensive context awareness while maintaining responsive performance through parallel processing and robust fallback mechanisms for all external API dependencies.
+
 ## Quick Setup for macOS Stickies
 
 ### 1. Start ChromaDB Server

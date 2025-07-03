@@ -389,7 +389,7 @@ function App() {
         </div>
 
         {/* User Goals Panel */}
-        <div className="mb-4 rounded-lg p-4">
+        <div className="mb-4 rounded-lg pb-2">
           <div 
             className="flex items-center gap-2 cursor-pointer mb-2"
             onClick={() => setIsGoalsPanelCollapsed(!isGoalsPanelCollapsed)}

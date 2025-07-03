@@ -1,0 +1,64 @@
+graph TD
+    Start([User Types in Sticky Note]) --> Input[Input Node<br/>📝 Initialize State<br/>Load paragraph text, user goals,<br/>current file path, OpenAI & ChromaDB clients]
+    
+    Input --> Embed[Embed Node<br/>🧠 Generate Embedding<br/>OpenAI text-embedding-3-small<br/>or fallback hash-based embedding]
+    
+    Embed --> Retrieve[Retrieve Node<br/>🔍 Query ChromaDB<br/>Find top 10 similar vectors<br/>from stickies_rag_v1 collection]
+    
+    Retrieve --> Filter[Filter Node<br/>🔬 Filter Results<br/>Apply similarity threshold 0.3<br/>Exclude current sticky content<br/>Include title vectors regardless]
+    
+    Filter --> Summarise[Summarise Node<br/>📝 Generate Summary<br/>GPT-4.1 creates focused summary<br/>of filtered snippets]
+    
+    Summarise --> WebSearchGen[Web Search Prompt Generator<br/>🔍 Generate Search Queries<br/>GPT-4.1 creates 3 targeted<br/>web search queries]
+    
+    WebSearchGen --> WebSearchExec[Web Search Execution<br/>🌐 Execute Searches<br/>Brave API primary<br/>DuckDuckGo fallback]
+    
+    WebSearchExec --> WebPageSelect[Web Page Selection<br/>🎯 Select Best Pages<br/>GPT-4.1 chooses 2 most valuable<br/>pages for detailed analysis]
+    
+    WebPageSelect --> WebScrape[Web Scraping Node<br/>🕷️ Scrape Content<br/>Extract readable text from<br/>selected pages using axios/cheerio]
+    
+    WebScrape --> WebSummarize[Web Page Summarization<br/>📄 Summarize Pages<br/>GPT-4.1 creates focused summaries<br/>of scraped content]
+    
+    WebSummarize --> Synthesis[StickyBrain Synthesis<br/>🧠 Final Synthesis<br/>Combine RAG + web research<br/>into single focused insight]
+    
+    Synthesis --> Output[Output Node<br/>🎉 Final Result<br/>Combine all results and<br/>send to UI]
+    
+    %% Incremental Updates
+    Summarise -.-> UI1[UI Update 1<br/>📤 RAG Results<br/>snippets + summary]
+    WebSearchGen -.-> UI2[UI Update 2<br/>📤 Search Prompts<br/>suggested queries]
+    WebSearchExec -.-> UI3[UI Update 3<br/>📤 Search Results<br/>links + descriptions]
+    WebSummarize -.-> UI4[UI Update 4<br/>📤 Web Summaries<br/>page insights]
+    Synthesis -.-> UI5[UI Update 5<br/>📤 Final Synthesis<br/>combined insights]
+    
+    %% Parallel Execution Paths
+    Summarise --> ParallelSplit{Parallel Execution}
+    ParallelSplit --> WebSearchGen
+    ParallelSplit --> Continue[Continue to Synthesis]
+    
+    %% Error Handling and Fallbacks
+    Embed --> EmbedFallback[Fallback:<br/>Hash-based embedding]
+    Summarise --> SummariseFallback[Fallback:<br/>Simple snippet listing]
+    WebSearchGen --> WebSearchFallback[Fallback:<br/>Template-based queries]
+    WebScrape --> ScrapeFallback[Fallback:<br/>Error message stored]
+    WebSummarize --> SummarizeFallback[Fallback:<br/>Content length summary]
+    
+    %% Configuration and Dependencies
+    Config[Configuration<br/>🔧 Environment Setup<br/>OpenAI API Key<br/>ChromaDB connection<br/>Similarity threshold 0.3<br/>User goals] --> Input
+    
+    ChromaDB[(ChromaDB<br/>🗄️ Vector Database<br/>Collection: stickies_rag_v1<br/>Embeddings from all user stickies)] --> Retrieve
+    
+    APIs[External APIs<br/>🌐 Web Search<br/>Brave API primary<br/>DuckDuckGo fallback<br/>OpenAI GPT-4.1] --> WebSearchExec
+    
+    %% Styling
+    classDef nodeStyle fill:#e1f5fe,stroke:#0277bd,stroke-width:2px
+    classDef inputStyle fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef outputStyle fill:#e8f5e8,stroke:#388e3c,stroke-width:2px
+    classDef updateStyle fill:#fff3e0,stroke:#f57c00,stroke-width:1px,stroke-dasharray: 5 5
+    classDef fallbackStyle fill:#fce4ec,stroke:#c2185b,stroke-width:1px
+    classDef configStyle fill:#f1f8e9,stroke:#689f38,stroke-width:2px
+    
+    class Start,Input inputStyle
+    class Output,UI1,UI2,UI3,UI4,UI5 outputStyle
+    class Embed,Retrieve,Filter,Summarise,WebSearchGen,WebSearchExec,WebPageSelect,WebScrape,WebSummarize,Synthesis nodeStyle
+    class EmbedFallback,SummariseFallback,WebSearchFallback,ScrapeFallback,SummarizeFallback fallbackStyle
+    class Config,ChromaDB,APIs configStyle 

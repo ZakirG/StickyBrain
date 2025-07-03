@@ -4,7 +4,7 @@ A macOS application that provides AI-powered context from your Stickies notes wh
 
 ## LangGraph Implementation
 
-![LangGraph Flow Diagram](langgraph-flow-diagram-submission-2.png)
+![LangGraph Flow Diagram](langgraph-flow-diagram-v4.png)
 
 StickyBrain's core intelligence is powered by a sophisticated LangGraph implementation that orchestrates an 11-node pipeline combining local RAG retrieval with intelligent web research. When you type in a Sticky note, the system triggers a dual-path execution model: the RAG pipeline processes your input through embedding generation, ChromaDB similarity search, and content filtering, while simultaneously generating targeted web search queries that are executed through Brave API and DuckDuckGo.
 

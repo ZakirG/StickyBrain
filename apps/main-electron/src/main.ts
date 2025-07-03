@@ -123,7 +123,7 @@ const createFloatingWindow = (): void => {
   // Create the browser window with floating properties
   mainWindow = new BrowserWindow({
     height: 800,
-    width: 800,
+    width: 900,
     webPreferences: {
       preload: join(__dirname, '../preload/preload.js'),
       nodeIntegration: false,

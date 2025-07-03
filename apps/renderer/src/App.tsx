@@ -238,8 +238,19 @@ function App() {
         id="root-panel"
       >
         {/* Header Bar (drag) */}
-        <div className="h-6 mb-2 select-none" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
-          <h1 className="text-sm font-semibold">🧠 StickyBrain</h1>
+        <div className="h-6 mb-2 select-none flex items-center gap-3" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
+          <div className="flex items-center gap-2">
+            <h1 className="text-sm font-semibold">🧠 StickyBrain</h1>
+            {isLoading && (
+              <div className="flex items-center gap-2 text-xs text-blue-300" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+                <span>Loading</span>
+                <div className="lds-ripple text-blue-300">
+                  <div></div>
+                  <div></div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Action Bar (no-drag) */}
@@ -306,8 +317,19 @@ function App() {
           )}
         </div>
 
+        {/* Loading Indicator */}
+        {false && (
+          <div className="mb-4 bg-blue-900/30 border border-blue-600/50 rounded-lg p-3 flex items-center gap-3" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+            <div className="text-lg animate-spin">🔄</div>
+            <div className="flex-1">
+              <p className="text-sm font-medium text-blue-300">{statusText}</p>
+              <p className="text-xs text-gray-400">Analyzing your note...</p>
+            </div>
+          </div>
+        )}
+
         {/* Global Loading Overlay */}
-        {isLoading && (
+        {false && (
           <div className="fixed inset-0 bg-gray-900/80 z-50 flex flex-col items-center justify-center" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
             <div className="text-4xl animate-spin">🔄</div>
             <p className="mt-4 text-lg font-semibold text-blue-300">{statusText}</p>
@@ -417,7 +439,7 @@ function App() {
               </div>
             ))}
 
-            {sections.length === 0 && !isLoading && (
+            {sections.length === 0 && (
               <div className="text-center text-gray-500 mt-8">
                 <div className="text-2xl mb-2">🧠</div>
                 <p className="text-sm">Welcome to Sticky Brain!</p>

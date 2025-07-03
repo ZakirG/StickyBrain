@@ -198,7 +198,7 @@ async function cleanSnippetText(raw) {
 const createFloatingWindow = () => {
   mainWindow = new electron.BrowserWindow({
     height: 800,
-    width: 800,
+    width: 900,
     webPreferences: {
       preload: path.join(__dirname, "../preload/preload.js"),
       nodeIntegration: false,

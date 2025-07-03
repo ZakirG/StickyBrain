@@ -7107,7 +7107,16 @@ function App() {
       className: "fixed inset-0 bg-black text-white p-4 overflow-y-auto relative",
       id: "root-panel",
       children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "h-6 mb-2 select-none", style: { WebkitAppRegion: "drag" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-sm font-semibold", children: "🧠 StickyBrain" }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "h-6 mb-2 select-none flex items-center gap-3", style: { WebkitAppRegion: "drag" }, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-sm font-semibold", children: "🧠 StickyBrain" }),
+          isLoading && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2 text-xs text-blue-300", style: { WebkitAppRegion: "no-drag" }, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Loading" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lds-ripple text-blue-300", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", {}),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", {})
+            ] })
+          ] })
+        ] }) }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-end gap-2 mb-4", style: { WebkitAppRegion: "no-drag" }, children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             "button",
@@ -7181,11 +7190,8 @@ function App() {
             ) })
           ] })
         ] }),
-        isLoading && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "fixed inset-0 bg-gray-900/80 z-50 flex flex-col items-center justify-center", style: { WebkitAppRegion: "no-drag" }, children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-4xl animate-spin", children: "🔄" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-lg font-semibold text-blue-300", children: statusText }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-gray-400", children: "Please wait while we analyze your note." })
-        ] }),
+        false,
+        false,
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-4 h-full", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 space-y-6", children: [
             sections.map((section, idx) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
@@ -7280,7 +7286,7 @@ function App() {
                 })
               ] })
             ] }, idx)),
-            sections.length === 0 && !isLoading && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-center text-gray-500 mt-8", children: [
+            sections.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-center text-gray-500 mt-8", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-2xl mb-2", children: "🧠" }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm", children: "Welcome to Sticky Brain!" }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs mt-2 max-w-xs mx-auto leading-relaxed", children: "Start typing thoughts in a Sticky and I'll grab relevant snippets from other Stickies of yours." })

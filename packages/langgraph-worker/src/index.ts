@@ -434,7 +434,7 @@ async function filterNode(state: RagState): Promise<Partial<RagState>> {
 async function summariseNode(state: RagState): Promise<Partial<RagState>> {
   console.log('📝 [SUMMARISE NODE] Generating AI summary...');
   
-  const summary = await generateSummary(state.paragraphText, state.filteredSnippets, state.openai);
+  const summary = await generateSummary(state.paragraphText, state.filteredSnippets, state.userGoals, state.openai);
   console.log('✅ [SUMMARISE NODE] Summary generated, length:', summary.length, 'characters');
   console.log('📄 [SUMMARISE NODE] Summary preview:', summary.substring(0, 100) + '...');
 
@@ -510,18 +510,30 @@ async function generateEmbedding(text: string, openai: OpenAI): Promise<number[]
 /**
  * Generate summary using OpenAI or fallback
  */
-async function generateSummary(paragraph: string, snippets: Snippet[], openai: OpenAI): Promise<string> {
+async function generateSummary(paragraph: string, snippets: Snippet[], userGoals: string, openai: OpenAI): Promise<string> {
   // Use OpenAI if we have an API key OR if we're in test mode with a mocked instance
   const shouldUseOpenAI = process.env.OPENAI_API_KEY || process.env.NODE_ENV === 'test';
   
   if (shouldUseOpenAI) {
     try {
       const contextText = snippets.map(s => `- ${s.stickyTitle}: ${s.content}`).join('\n');
-      const prompt = ` You are an assistant in a Mac desktop application. The user is typing in a sticky note. Relevant snippets from their old Sticky notes are being retrieved via RAG and shown to them. You will be summarizing the snippets, starting with the information most valuable to the specific subproblem they are currently solving or the specific subtopic they are currently reflecting on. For example, if the user is trying to brainstorm app ideas, the MOST VALUABLE INFORMATION is SPECIFIC APP IDEAS that they wrote in the retrieved snippets. 
+
       
+      const prompt = `You are an assistant in a Mac desktop application. The user is typing in a sticky note. Relevant snippets from their old Sticky notes are being retrieved via RAG and shown to them. You will be summarizing the snippets, starting with the information most valuable to the specific subproblem they are currently solving or the specific subtopic they are currently reflecting on. For example, if the user is trying to brainstorm app ideas, the MOST VALUABLE INFORMATION is SPECIFIC APP IDEAS that they wrote in the retrieved snippets. 
+
       In your summary, do not mention any quotes that might contain sensitive information or curse words or embarrassing personal information because this technology will be shown in a tech demo.
       
-      Once again -- if the user is brainstorming app ideas, the most valuable information that your response must start with is SPECIFIC app ideas that they have written. Another example: If the user is writing 'What kind of song should I make?' then you should be specifically reminding them of old songs ideas they wanted to make in the past. Not sharing unrelated tips and tricks. Specifically address EXACTLY what they're thinking about. Extract ONLY the most useful information from the retrieved snippets. Put the MOST VALUABLE INFORMATION at the top of your response. Please bold the most valuable parts of your response. For example, if the user is trying to come up with app ideas, then the name of the apps that they have ideas for should be bolded. This is what the user is currently typing and thinking about:\n\n"${paragraph}"\n\nThese are the relevant snippets retrieved from their old Sticky notes related to what they are currently typing and thinking about: \n${contextText}\n\nNow summarize the content of the retrieved Stickies in a way that concisely gives them the valuable related information that might help them solve their current problems or assist them in their thought process. Your summary should include specific quotes from the retrieved snippets and should include specific details. Avoid fluff language. If you have nothing useful to say, then be honest that the retrieved snippets might not be relevant. In your response, do not begin with a preface. Go straight into providing the user helpful information related to whatever they're thinking about, formatted with a short title (2-5 words) that summarizes how you interpreted what the user might be looking for, and explicitly references the fact that you are summarizing information from their Sticky notes. Your response should be in plain text, do not use markdown. Instead of bullet points, use single dashes "-". Do not add a conclusion line at the end of your response. Do not add fluff on each summary item, just give the related quote `;
+      Once again -- if the user is brainstorming app ideas, the most valuable information that your response must start with is SPECIFIC app ideas that they have written. Another example: If the user is writing 'What kind of song should I make?' then you should be specifically reminding them of old songs ideas they wanted to make in the past. Not sharing unrelated tips and tricks. Specifically address EXACTLY what they're thinking about. Extract ONLY the most useful information from the retrieved snippets. Put the MOST VALUABLE INFORMATION at the top of your response. Please bold the most valuable parts of your response. For example, if the user is trying to come up with app ideas, then the name of the apps that they have ideas for should be bolded. This is what the user is currently typing and thinking about:\n\n"${paragraph}"
+
+      Your summary should also highlight specific information that helps the user achieve their overarching personal goals, which they have written below:
+      ${userGoals.trim()}
+      
+      
+      \n\nThese are the relevant snippets to summarize, retrieved from their old Sticky notes, that are related to what they are currently typing and thinking about: \n${contextText}
+      
+      \n\nNow summarize the content of the retrieved Stickies in a way that concisely gives them the valuable related information that might help them solve their current problems, help them achieve their overaching personal goals, and assist them in their thought process. Your summary should include specific quotes from the retrieved snippets and should include specific details. Avoid fluff language. If you have nothing useful to say, then be honest that the retrieved snippets might not be relevant. In your response, do not begin with a preface. Go straight into providing the user helpful information related to whatever they're thinking about, formatted with a short title (2-5 words) that summarizes how you interpreted what the user might be looking for, and explicitly references the fact that you are summarizing information from their Sticky notes. 
+      
+      Your response should be in plain text, do not use markdown. Instead of bullet points, use single dashes "-". Do not add a conclusion line at the end of your response. Do not add fluff on each summary item, just give the related quote `;
       
       const response = await openai.chat.completions.create({
         model: 'gpt-4.1-2025-04-14',
@@ -552,18 +564,14 @@ async function generateWebSearchPrompt(paragraph: string, userGoals: string, ope
   
   if (shouldUseOpenAI) {
     try {
-      const goalsContext = userGoals.trim() 
-        ? `\n\nThe user's personal goals are: "${userGoals}"\n\nKeep these goals in mind when generating search queries - help them find information that aligns with their objectives and supports their current work.`
-        : '';
-      
-      const prompt = `Let's roleplay. You are an unusual and rebellious teenager that comes up with wild Google searches to help your big brother do research. Your big brother puts food on the table, and the results of his research might feed your family, if you suggest good informative clever creative rebellious think-outside-the-box web searches. We're greedy for success. You will be provided your big brother's goals and what he's currently thinking about. 
-      Your task is to quietly watch his thinking and come up with ideas for web searches to gather information spontaneously that might help him. He's very smart, so if you make generic bullshit web searches, you'll only be wasting his time. Instead, use your unique rebellious outside-the-box greedy hungry perspective to come up with web searches that gather rare, obscure information that benefits his current thought process and helps him achieve one or more of his larger personal goals.
-      Return 3-5 specific, targeted web search queries that satisfy the above requirements.
+      const prompt = `Your task is to suggest informative clever creative rebellious think-outside-the-box web searches that help the user in whatever they're currently typing and thinking about.
+      Return 3-5 specific, targeted web search queries.
 
-      Here's what your big brother is currently typing: "${paragraph}"${goalsContext}
+      All of your web search suggestions should be DIRECTLY relevant to what the user is currently typing.
+      Here's what the user is currently typing and thinking about: "${paragraph}"
 
-      And here's his larger personal goals, which he must achieve at any cost:
-      ${userGoals}
+      And here's the user's larger personal goals which might inform the ideas you come up with:
+      "${userGoals}"
       
       Reply only with the web searches, no other text. Use single dashes "-", not bullet points nor numbers.
       Use plain text, no markdown.
@@ -574,10 +582,11 @@ async function generateWebSearchPrompt(paragraph: string, userGoals: string, ope
       - best texting apps for insane rizz
       - how to come up with app ideas fast
 
-      The focus of your web searches should be to gather unique information that could help spark your big brother's creativity based on what he's currently typing that helps him meet his larger goals. Return less than 5 web search options.
+      The focus of your web searches should be to gather unique information that could help spark your big brother's creativity based on what he's currently typing that helps him meet his larger goals. Return less than 5 web search options. All of your web search suggestions should be DIRECTLY relevant to what he's currently typing.
+      Don't search for stupid vague things like "app ideas nobody has thought of yet", because obviously,
+      tautologically, that's not gonna return useful information. DUHHHH. So instead, come up with clever ideas that complement what your big bro has typed in specific and concrete creative ways that match his unique goals.
       `;
       
-      console.log('\n\n\n\n>> Web search prompt:', prompt);
       const response = await openai.chat.completions.create({
         model: 'gpt-4.1-2025-04-14',
         max_tokens: 600,

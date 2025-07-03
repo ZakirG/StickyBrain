@@ -7009,6 +7009,9 @@ function App() {
   const [statusText, setStatusText] = reactExports.useState("Awaiting input...");
   const [expandedSnippets, setExpandedSnippets] = reactExports.useState(/* @__PURE__ */ new Set());
   const [expandedSnippetContent, setExpandedSnippetContent] = reactExports.useState(/* @__PURE__ */ new Set());
+  const [userGoals, setUserGoals] = reactExports.useState("");
+  const [isGoalsSaving, setIsGoalsSaving] = reactExports.useState(false);
+  const [isGoalsPanelCollapsed, setIsGoalsPanelCollapsed] = reactExports.useState(false);
   reactExports.useEffect(() => {
     console.log("🎨 [RENDERER] App component mounted");
     console.log("🔌 [RENDERER] Setting up IPC listeners...");
@@ -7031,12 +7034,15 @@ function App() {
       setSections([]);
       setStatusText("Processing your note...");
     });
+    window.electronAPI.loadUserGoals().then((goals) => {
+      setUserGoals(goals);
+    });
     return () => {
     };
   }, []);
   const handleRefresh = async () => {
     console.log("🔄 [RENDERER] Manual refresh button clicked");
-    console.log("📤 [RENDERER] Sending refresh request to main process...");
+    console.log("�� [RENDERER] Sending refresh request to main process...");
     if (!window.electronAPI) return;
     setIsLoading(true);
     try {
@@ -7055,6 +7061,17 @@ function App() {
     setIsLoading(true);
     await window.electronAPI.runEmbeddings();
     setStatusText("Reindex triggered. Waiting for updates...");
+  };
+  const handleSaveGoals = async () => {
+    setIsGoalsSaving(true);
+    try {
+      await window.electronAPI.saveUserGoals(userGoals);
+      console.log("Goals saved successfully");
+    } catch (error) {
+      console.error("Failed to save goals:", error);
+    } finally {
+      setIsGoalsSaving(false);
+    }
   };
   const handleClear = () => {
     setSections([]);
@@ -7090,7 +7107,7 @@ function App() {
       className: "fixed inset-0 bg-black text-white p-4 overflow-y-auto relative",
       id: "root-panel",
       children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "h-6 mb-2 select-none", style: { WebkitAppRegion: "drag" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-sm font-semibold", children: "StickyBrain" }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "h-6 mb-2 select-none", style: { WebkitAppRegion: "drag" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-sm font-semibold", children: "🧠 StickyBrain" }) }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-end gap-2 mb-4", style: { WebkitAppRegion: "no-drag" }, children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(
             "button",
@@ -7121,6 +7138,48 @@ function App() {
               children: "🗑"
             }
           )
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-4 rounded-lg p-4", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "div",
+            {
+              className: "flex items-center gap-2 cursor-pointer mb-2",
+              onClick: () => setIsGoalsPanelCollapsed(!isGoalsPanelCollapsed),
+              children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-sm font-semibold text-blue-400", children: "User Goals" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "svg",
+                  {
+                    className: `w-4 h-4 text-blue-400 transition-transform ${isGoalsPanelCollapsed ? "-rotate-90" : "rotate-0"}`,
+                    fill: "none",
+                    stroke: "currentColor",
+                    viewBox: "0 0 24 24",
+                    children: /* @__PURE__ */ jsxRuntimeExports.jsx("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M19 9l-7 7-7-7" })
+                  }
+                )
+              ]
+            }
+          ),
+          !isGoalsPanelCollapsed && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "textarea",
+              {
+                value: userGoals,
+                onChange: (e) => setUserGoals(e.target.value),
+                placeholder: "Enter your goals here.",
+                className: "w-full h-20 bg-gray-900 border border-gray-600 rounded px-3 py-2 text-gray-300 text-sm resize-none focus:outline-none focus:border-blue-500"
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex justify-end", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                onClick: handleSaveGoals,
+                disabled: isGoalsSaving,
+                className: "px-3 py-1 bg-purple-600 text-white rounded text-sm hover:bg-purple-700 disabled:opacity-50",
+                children: isGoalsSaving ? "Saving..." : "Save"
+              }
+            ) })
+          ] })
         ] }),
         isLoading && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "fixed inset-0 bg-gray-900/80 z-50 flex flex-col items-center justify-center", style: { WebkitAppRegion: "no-drag" }, children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-4xl animate-spin", children: "🔄" }),
@@ -7221,19 +7280,16 @@ function App() {
                 })
               ] })
             ] }, idx)),
-            sections.length === 0 && !isLoading && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-center text-gray-400 mt-8", children: [
+            sections.length === 0 && !isLoading && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-center text-gray-500 mt-8", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-2xl mb-2", children: "🧠" }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm", children: "Welcome to Sticky Brain!" }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs mt-2 max-w-xs mx-auto leading-relaxed", children: "Start typing thoughts in a Sticky and I'll grab relevant snippets from other Stickies of yours." })
             ] })
           ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex-1 border-l border-gray-700 pl-4", children: sections.length > 0 && sections[0].webSearchPrompt ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex-1 border-l border-gray-700 pl-4", children: sections.length > 0 && sections[0].webSearchPrompt ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-gray-800 border border-purple-600/30 rounded p-3", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-sm font-semibold text-purple-400 flex items-center gap-2", children: "🔍 Suggested Web Searches" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-gray-800 border border-purple-600/30 rounded p-3", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-gray-400 mb-2", children: "Based on what you're writing:" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "text-sm text-gray-300 leading-relaxed whitespace-pre-wrap font-sans", children: sections[0].webSearchPrompt })
-            ] })
-          ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-center text-gray-500 mt-8", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "text-sm text-gray-300 leading-relaxed whitespace-pre-wrap font-sans", children: sections[0].webSearchPrompt })
+          ] }) }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-center text-gray-500 mt-8", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-2xl mb-2", children: "🔍" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm", children: "Web Search Suggestions" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs mt-2 max-w-xs mx-auto leading-relaxed", children: "Start typing in a Sticky and I'll suggest relevant web searches." })

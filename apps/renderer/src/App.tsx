@@ -15,6 +15,8 @@ declare global {
       onUpdate: (callback: (data: { snippets: any[]; summary: string; paragraph?: string }) => void) => void;
       onRagStart?: (callback: () => void) => void;
       runEmbeddings: () => Promise<void>;
+      loadUserGoals: () => Promise<string>;
+      saveUserGoals: (goals: string) => Promise<void>;
     };
   }
 }
@@ -33,6 +35,10 @@ interface SectionData {
   summary: string;
   paragraph?: string;
   webSearchPrompt?: string;
+}
+
+interface UserGoals {
+  text: string;
 }
 
 /**
@@ -109,6 +115,9 @@ function App() {
   const [expandedSnippets, setExpandedSnippets] = useState<Set<string>>(new Set());
   // Track which snippet content is expanded
   const [expandedSnippetContent, setExpandedSnippetContent] = useState<Set<string>>(new Set());
+  const [userGoals, setUserGoals] = useState<string>('');
+  const [isGoalsSaving, setIsGoalsSaving] = useState(false);
+  const [isGoalsPanelCollapsed, setIsGoalsPanelCollapsed] = useState(false);
 
   useEffect(() => {
     console.log('🎨 [RENDERER] App component mounted');
@@ -140,12 +149,17 @@ function App() {
       setStatusText('Processing your note...');
     });
 
+    // Load user goals on startup
+    window.electronAPI.loadUserGoals().then((goals: string) => {
+      setUserGoals(goals);
+    });
+
     return () => {};
   }, []);
 
   const handleRefresh = async () => {
     console.log('🔄 [RENDERER] Manual refresh button clicked');
-    console.log('📤 [RENDERER] Sending refresh request to main process...');
+    console.log('�� [RENDERER] Sending refresh request to main process...');
     
     if (!window.electronAPI) return;
     
@@ -167,6 +181,18 @@ function App() {
     setIsLoading(true);
     await window.electronAPI.runEmbeddings();
     setStatusText('Reindex triggered. Waiting for updates...');
+  };
+
+  const handleSaveGoals = async () => {
+    setIsGoalsSaving(true);
+    try {
+      await window.electronAPI.saveUserGoals(userGoals);
+      console.log('Goals saved successfully');
+    } catch (error) {
+      console.error('Failed to save goals:', error);
+    } finally {
+      setIsGoalsSaving(false);
+    }
   };
 
   const handleClear = () => {
@@ -213,7 +239,7 @@ function App() {
       >
         {/* Header Bar (drag) */}
         <div className="h-6 mb-2 select-none" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
-          <h1 className="text-sm font-semibold">StickyBrain</h1>
+          <h1 className="text-sm font-semibold">🧠 StickyBrain</h1>
         </div>
 
         {/* Action Bar (no-drag) */}
@@ -241,6 +267,43 @@ function App() {
           >
             🗑
           </button>
+        </div>
+
+        {/* User Goals Panel */}
+        <div className="mb-4 rounded-lg p-4">
+          <div 
+            className="flex items-center gap-2 cursor-pointer mb-2"
+            onClick={() => setIsGoalsPanelCollapsed(!isGoalsPanelCollapsed)}
+          >
+            <h2 className="text-sm font-semibold text-blue-400">User Goals</h2>
+            <svg 
+              className={`w-4 h-4 text-blue-400 transition-transform ${isGoalsPanelCollapsed ? '-rotate-90' : 'rotate-0'}`}
+              fill="none" 
+              stroke="currentColor" 
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </div>
+          {!isGoalsPanelCollapsed && (
+            <div className="space-y-2">
+              <textarea
+                value={userGoals}
+                onChange={(e) => setUserGoals(e.target.value)}
+                placeholder="Enter your goals here."
+                className="w-full h-20 bg-gray-900 border border-gray-600 rounded px-3 py-2 text-gray-300 text-sm resize-none focus:outline-none focus:border-blue-500"
+              />
+              <div className="flex justify-end">
+                <button
+                  onClick={handleSaveGoals}
+                  disabled={isGoalsSaving}
+                  className="px-3 py-1 bg-purple-600 text-white rounded text-sm hover:bg-purple-700 disabled:opacity-50"
+                >
+                  {isGoalsSaving ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Global Loading Overlay */}
@@ -355,7 +418,7 @@ function App() {
             ))}
 
             {sections.length === 0 && !isLoading && (
-              <div className="text-center text-gray-400 mt-8">
+              <div className="text-center text-gray-500 mt-8">
                 <div className="text-2xl mb-2">🧠</div>
                 <p className="text-sm">Welcome to Sticky Brain!</p>
                 <p className="text-xs mt-2 max-w-xs mx-auto leading-relaxed">

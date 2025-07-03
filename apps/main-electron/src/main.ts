@@ -265,6 +265,34 @@ ipcMain.on('set-inactive', () => {
   console.log('Window set to inactive');
 });
 
+// User Goals persistence
+const userGoalsPath = join(app.getPath('userData'), 'user-goals.txt');
+
+ipcMain.handle('load-user-goals', async () => {
+  try {
+    if (fs.existsSync(userGoalsPath)) {
+      const goals = fs.readFileSync(userGoalsPath, 'utf-8');
+      console.log('[main] User goals loaded from:', userGoalsPath);
+      return goals;
+    }
+    return '';
+  } catch (error) {
+    console.error('[main] Failed to load user goals:', error);
+    return '';
+  }
+});
+
+ipcMain.handle('save-user-goals', async (_, goals: string) => {
+  try {
+    fs.writeFileSync(userGoalsPath, goals, 'utf-8');
+    console.log('[main] User goals saved to:', userGoalsPath);
+    return { success: true };
+  } catch (error) {
+    console.error('[main] Failed to save user goals:', error);
+    throw error;
+  }
+});
+
 ipcMain.handle('run-embeddings', async () => {
   console.log('[main] Run Embeddings triggered via UI');
   try {

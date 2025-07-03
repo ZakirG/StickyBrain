@@ -12,6 +12,8 @@ interface ElectronAPI {
   onUpdate: (callback: (data: { snippets: any[]; summary: string; paragraph?: string }) => void) => void;
   onRagStart: (callback: () => void) => void;
   runEmbeddings: () => Promise<void>;
+  loadUserGoals: () => Promise<string>;
+  saveUserGoals: (goals: string) => Promise<void>;
 }
 
 // Expose protected methods that allow the renderer process to use
@@ -26,6 +28,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('rag-started', () => callback());
   },
   runEmbeddings: () => ipcRenderer.invoke('run-embeddings'),
+  loadUserGoals: () => ipcRenderer.invoke('load-user-goals'),
+  saveUserGoals: (goals: string) => ipcRenderer.invoke('save-user-goals', goals),
 } as ElectronAPI);
 
 export {}; 

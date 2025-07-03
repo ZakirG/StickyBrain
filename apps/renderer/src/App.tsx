@@ -51,26 +51,46 @@ function extractNoteTitle(noteText: string): string {
 }
 
 /**
- * Extracts the first 2-3 sentences from text for preview
+ * Extracts the first 2-3 sentences from text for preview, preserving newlines
  */
 function extractPreview(text: string): string {
   if (!text) return '';
   
-  // Split by sentence endings, keeping the punctuation
+  // If text is short enough, return as-is
+  if (text.length <= 400) {
+    return text;
+  }
+  
+  // For longer text, try to break at sentence boundaries but preserve formatting
   const sentences = text.match(/[^.!?]*[.!?]+/g) || [];
   
   if (sentences.length === 0) {
-    // If no sentence endings found, take first 300 characters (doubled from 150)
-    return text.length > 300 ? text.substring(0, 297) + '...' : text;
+    // If no sentence endings found, take first 300 characters
+    return text.substring(0, 297) + '...';
   }
   
-  // Take first 2-3 sentences, but limit total length
-  let preview = sentences.slice(0, 3).join(' ').trim();
+  // Find the original position of each sentence in the text to preserve formatting
+  let preview = '';
+  let currentPos = 0;
   
-  if (preview.length > 400) {
-    preview = sentences.slice(0, 2).join(' ').trim();
+  for (let i = 0; i < Math.min(3, sentences.length); i++) {
+    const sentence = sentences[i];
+    const sentenceStart = text.indexOf(sentence, currentPos);
+    
+    if (sentenceStart >= 0) {
+      // Include any whitespace/newlines before the sentence
+      const beforeSentence = text.substring(currentPos, sentenceStart);
+      preview += beforeSentence + sentence;
+      currentPos = sentenceStart + sentence.length;
+      
+      // Stop if we're getting too long
+      if (preview.length > 400) {
+        break;
+      }
+    }
   }
   
+  // If still too long, truncate but try to preserve some formatting
   if (preview.length > 400) {
     preview = preview.substring(0, 397) + '...';
   }
@@ -290,14 +310,14 @@ function App() {
                           >
                             {isSnippetContentExpanded ? '▼' : '▶'} Snippet Text
                           </button>
-                          <div className="p-2 bg-gray-800/60 rounded text-xs whitespace-pre-line">
+                          <pre className="p-2 bg-gray-800/60 rounded text-xs whitespace-pre-wrap font-sans overflow-x-auto">
                             {(() => {
                               const displayContent = isSnippetContentExpanded ? snippet.content : snippetPreview;
                               console.log('🖥️ [RENDERER] Content being displayed:', JSON.stringify(displayContent));
                               console.log('🖥️ [RENDERER] Content char codes:', displayContent.split('').map(c => c.charCodeAt(0)).join(','));
                               return displayContent;
                             })()}
-                          </div>
+                          </pre>
                           {shouldShowSnippetToggle && (
                             <button
                               onClick={() => toggleSnippetContentExpansion(snippet.id)}
@@ -312,9 +332,9 @@ function App() {
                         {snippet.noteText && (
                           <div className="mt-3 hidden">
                             <h4 className="text-xs font-medium text-gray-400 mb-1">Full Sticky Content</h4>
-                            <div className="p-2 bg-gray-800/60 rounded text-xs whitespace-pre-line">
+                            <pre className="p-2 bg-gray-800/60 rounded text-xs whitespace-pre-wrap font-sans overflow-x-auto">
                               {isFullContentExpanded ? snippet.noteText : fullContentPreview}
-                            </div>
+                            </pre>
                             {shouldShowFullContentToggle && (
                               <button
                                 onClick={() => toggleSnippetExpansion(snippet.id)}

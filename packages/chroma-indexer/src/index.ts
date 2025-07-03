@@ -14,26 +14,8 @@ import OpenAI from 'openai';
 // Load environment variables
 dotenv.config();
 
-// Dynamic import for rtf2text to work with ES modules
-let rtf2textString: any;
-try {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const rtf2textModule = (await import('rtf2text')) as any;
-  rtf2textString = rtf2textModule.string || rtf2textModule.default?.string;
-  console.log('[index] rtf2text package loaded successfully');
-} catch {
-  console.warn('[index] rtf2text package not available, falling back to regex stripping');
-  rtf2textString = null;
-}
-
 // Try to import Chroma client – fallback to undefined if lib not available at runtime
 let ChromaClientCtor: any;
-try {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  ChromaClientCtor = (await import('chromadb')).ChromaClient;
-} catch {
-  ChromaClientCtor = undefined;
-}
 
 /**
  * Minimal in-memory collection used during tests when the real Chroma client is not available.
@@ -194,10 +176,10 @@ function stripRtfTags(rtfContent: string): string {
   // Remove any remaining backslashes
   text = text.replace(/\\/g, ' ');
 
-  // Clean up whitespace
-  text = text.replace(/\s+/g, ' ');
-  text = text.replace(/\n\s+/g, '\n');
-  text = text.replace(/\s+\n/g, '\n');
+  // Clean up whitespace but preserve newlines
+  text = text.replace(/[ \t]+/g, ' '); // Only collapse spaces and tabs
+  text = text.replace(/\n\s+/g, '\n'); // Remove whitespace after newlines
+  text = text.replace(/\s+\n/g, '\n'); // Remove whitespace before newlines
 
   // Split into lines and clean each line
   const lines = text.split('\n').map(line => line.trim()).filter(line => {
@@ -216,13 +198,54 @@ function stripRtfTags(rtfContent: string): string {
  * @param rtfdPath Path to the .rtfd bundle
  * @returns Plain text content
  */
-export function extractTextFromRtfd(rtfdPath: string): { text: string; title: string } {
+export async function extractTextFromRtfd(rtfdPath: string): Promise<{ text: string; title: string }> {
   const txtPath = join(rtfdPath, 'TXT.rtf');
   
   try {
     const rtfContent = readFileSync(txtPath, 'utf-8');
-    // Use regex-based RTF stripping for now since rtf2text has Unicode issues
-    const plainText = stripRtfTags(rtfContent);
+    let plainText = '';
+    
+    // Try rtf2text first - load dynamically to avoid compilation issues
+    let rtf2textString: any = null;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const rtf2textModule = require('rtf2text');
+      rtf2textString = rtf2textModule.string;
+      console.log(`[index] rtf2text package loaded successfully for ${basename(rtfdPath)}`);
+    } catch (error) {
+      console.warn(`[index] rtf2text package not available for ${basename(rtfdPath)}, falling back to regex stripping:`, error);
+      rtf2textString = null;
+    }
+    
+    if (rtf2textString) {
+      try {
+        // rtf2text uses a callback-based API, so we need to wrap it in a Promise
+        plainText = await new Promise<string>((resolve, reject) => {
+          rtf2textString(rtfContent, (err: any, text: string) => {
+            if (err) {
+              reject(err);
+            } else {
+              resolve(text || '');
+            }
+          });
+        });
+        console.log(`[index] RTF2TEXT success for ${basename(rtfdPath)}: ${plainText.substring(0, 50)}...`);
+      } catch (error) {
+        console.warn(`[index] RTF2TEXT failed for ${basename(rtfdPath)}, falling back to regex:`, error);
+        plainText = stripRtfTags(rtfContent);
+      }
+    } else {
+      // Fallback to regex-based stripping
+      plainText = stripRtfTags(rtfContent);
+    }
+    
+    // Clean up any remaining Unicode issues
+    plainText = plainText
+      .replace(/[\uFFFE\uFFFF]/g, '') // Remove replacement characters
+      .replace(/[\uD800-\uDFFF]/g, '') // Remove surrogates
+      .normalize('NFC') // Normalize Unicode
+      .trim();
+    
     const title = basename(rtfdPath, '.rtfd');
     return { text: plainText, title };
   } catch (error) {
@@ -286,7 +309,15 @@ async function embedBatch(texts: string[]): Promise<number[][]> {
   // Debug: show first 5 texts being embedded
   texts.slice(0, 5).forEach((t, idx) => {
     console.log(`🧠 [embed] Text ${idx + 1}: "${t.substring(0, 80)}"`);
+    console.log(`🧠 [embed] Full text ${idx + 1}:`, JSON.stringify(t));
+    console.log(`🧠 [embed] Contains newlines:`, t.includes('\n'));
   });
+  
+  // BREAKPOINT: Exit early to check what's being embedded without waiting for embeddings
+  // console.log('🛑 [embed] BREAKPOINT: Exiting before embeddings to debug content');
+  // console.log('🛑 [embed] Total texts to embed:', texts.length);
+  // process.exit(0);
+  // return []; // This will never be reached but satisfies TypeScript
 
   const apiKey = process.env.OPENAI_API_KEY;
 
@@ -364,12 +395,13 @@ export async function indexStickies(opts: IndexOptions = {}) {
     meta: Record<string, unknown>;
   }[] = [];
 
-  rtfdPaths.forEach((p) => {
-    const plain = extractTextFromRtfd(p);
+  // Process each sticky note asynchronously
+  for (const p of rtfdPaths) {
+    const plain = await extractTextFromRtfd(p);
     const chunks = splitIntoParagraphs(plain.text);
     
-    // Use the first non-empty line of the sticky as its title; fallback to file basename
-    const fileId = plain.title; // a.k.a file basename
+    // Use the file basename (UUID) as unique ID, not the content-derived title
+    const fileId = basename(p, '.rtfd').replace(/\.sb-[^.]+$/, ''); // Remove sandbox suffix
     let stickyTitle = plain.text.split('\n').map(l => l.trim()).find(l => l.length > 0) || fileId;
     if (stickyTitle.length > 120) {
       stickyTitle = stickyTitle.slice(0, 117) + '...';
@@ -419,7 +451,7 @@ export async function indexStickies(opts: IndexOptions = {}) {
         meta: chunkMeta,
       });
     });
-  });
+  }
 
   console.log(`[index] Total paragraphs (including ${rtfdPaths.length} title vectors): ${paragraphs.length}`);
 
@@ -438,6 +470,16 @@ export async function indexStickies(opts: IndexOptions = {}) {
   let client = opts.client;
   
   if (!client) {
+    // Try to load ChromaDB dynamically
+    if (!ChromaClientCtor) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        ChromaClientCtor = (await import('chromadb')).ChromaClient;
+      } catch {
+        ChromaClientCtor = undefined;
+      }
+    }
+    
     if (ChromaClientCtor) {
       try {
         client = new ChromaClientCtor({ path: process.env.CHROMA_URL });
@@ -568,7 +610,9 @@ function sanitizeForJson(text: string): string {
     .replace(/[{}]/g, '')
     // Remove quotes that could break JSON
     .replace(/"/g, "'")
-    // Clean up multiple spaces
-    .replace(/\s+/g, ' ')
+    // Clean up multiple spaces but preserve newlines
+    .replace(/[ \t]+/g, ' ')
+    // Clean up excessive newlines (more than 2 consecutive)
+    .replace(/\n{3,}/g, '\n\n')
     .trim();
 } 

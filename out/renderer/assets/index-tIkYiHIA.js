@@ -6976,13 +6976,26 @@ function extractNoteTitle(noteText) {
 }
 function extractPreview(text) {
   if (!text) return "";
+  if (text.length <= 400) {
+    return text;
+  }
   const sentences = text.match(/[^.!?]*[.!?]+/g) || [];
   if (sentences.length === 0) {
-    return text.length > 300 ? text.substring(0, 297) + "..." : text;
+    return text.substring(0, 297) + "...";
   }
-  let preview = sentences.slice(0, 3).join(" ").trim();
-  if (preview.length > 400) {
-    preview = sentences.slice(0, 2).join(" ").trim();
+  let preview = "";
+  let currentPos = 0;
+  for (let i = 0; i < Math.min(3, sentences.length); i++) {
+    const sentence = sentences[i];
+    const sentenceStart = text.indexOf(sentence, currentPos);
+    if (sentenceStart >= 0) {
+      const beforeSentence = text.substring(currentPos, sentenceStart);
+      preview += beforeSentence + sentence;
+      currentPos = sentenceStart + sentence.length;
+      if (preview.length > 400) {
+        break;
+      }
+    }
   }
   if (preview.length > 400) {
     preview = preview.substring(0, 397) + "...";
@@ -7168,7 +7181,7 @@ function App() {
                         ]
                       }
                     ),
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "p-2 bg-gray-800/60 rounded text-xs whitespace-pre-line", children: (() => {
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "p-2 bg-gray-800/60 rounded text-xs whitespace-pre-wrap font-sans overflow-x-auto", children: (() => {
                       const displayContent = isSnippetContentExpanded ? snippet.content : snippetPreview;
                       console.log("🖥️ [RENDERER] Content being displayed:", JSON.stringify(displayContent));
                       console.log("🖥️ [RENDERER] Content char codes:", displayContent.split("").map((c) => c.charCodeAt(0)).join(","));
@@ -7189,7 +7202,7 @@ function App() {
                   ] }),
                   snippet.noteText && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 hidden", children: [
                     /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "text-xs font-medium text-gray-400 mb-1", children: "Full Sticky Content" }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "p-2 bg-gray-800/60 rounded text-xs whitespace-pre-line", children: isFullContentExpanded ? snippet.noteText : fullContentPreview }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "p-2 bg-gray-800/60 rounded text-xs whitespace-pre-wrap font-sans overflow-x-auto", children: isFullContentExpanded ? snippet.noteText : fullContentPreview }),
                     shouldShowFullContentToggle && /* @__PURE__ */ jsxRuntimeExports.jsxs(
                       "button",
                       {

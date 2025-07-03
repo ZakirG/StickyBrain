@@ -104,8 +104,13 @@ async function cleanSnippetText(raw: string): Promise<string> {
   // Remove braces
   cleaned = cleaned.replace(/[{}]/g, '');
   
-  // Clean up whitespace
-  cleaned = cleaned.replace(/\s+/g, ' ').trim();
+  // Clean up whitespace but preserve newlines
+  // Replace multiple spaces/tabs with single space, but keep newlines
+  cleaned = cleaned.replace(/[ \t]+/g, ' ');
+  // Clean up excessive newlines (more than 2 consecutive)
+  cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+  // Trim whitespace from start and end
+  cleaned = cleaned.trim();
   
   console.log('🧹 [MAIN] Cleaned snippet content:', JSON.stringify(cleaned.substring(0, 100)));
   return cleaned;
@@ -221,7 +226,12 @@ app.whenReady().then(() => {
     });
     
     lastParagraph = payload.text;
-    workerProcess.send({ type: 'run', paragraph: payload.text });
+    console.log('📁 [MAIN] Current sticky file path:', payload.filePath);
+    workerProcess.send({ 
+      type: 'run', 
+      paragraph: payload.text, 
+      currentFilePath: payload.filePath 
+    });
   });
 
   app.on('activate', () => {
@@ -266,11 +276,35 @@ ipcMain.handle('run-embeddings', async () => {
       resolve(__dirname, '../../packages/chroma-indexer/src/index.js'),
     ];
 
+    console.log('🔍 [MAIN] Looking for chroma-indexer in candidates:');
+    candidates.forEach((p, idx) => {
+      const exists = fs.existsSync(p);
+      console.log(`  ${idx + 1}. ${p} - exists: ${exists}`);
+    });
+
     let chromaIndexer: any = null;
     for (const p of candidates) {
       if (fs.existsSync(p)) {
-        chromaIndexer = await import(`file://${p}`);
-        break;
+        console.log('🔍 [MAIN] Attempting to import:', p);
+        try {
+          // Try CommonJS require first since we changed to CommonJS output
+          delete require.cache[require.resolve(p)];
+          chromaIndexer = require(p);
+          console.log('🔍 [MAIN] CommonJS require succeeded');
+          console.log('🔍 [MAIN] Module keys:', Object.keys(chromaIndexer || {}));
+          break;
+        } catch (requireErr) {
+          console.log('🔍 [MAIN] CommonJS require failed:', (requireErr as Error).message);
+          try {
+            // Fallback to ES module import
+            chromaIndexer = await import(`file://${p}`);
+            console.log('🔍 [MAIN] ES module import succeeded');
+            console.log('🔍 [MAIN] Module keys:', Object.keys(chromaIndexer || {}));
+            break;
+          } catch (importErr) {
+            console.log('🔍 [MAIN] ES module import failed:', (importErr as Error).message);
+          }
+        }
       }
     }
 
@@ -278,6 +312,7 @@ ipcMain.handle('run-embeddings', async () => {
       throw new Error('Could not locate chroma-indexer implementation');
     }
 
+    console.log('🔍 [MAIN] Checking for indexStickies function:', !!chromaIndexer.indexStickies);
     const { indexStickies } = chromaIndexer as any;
     const chroma = await import('chromadb');
     const ChromaClientCtor = (chroma as any).ChromaClient;
@@ -300,6 +335,7 @@ ipcMain.handle('run-embeddings', async () => {
     return { success: true };
   } catch (err) {
     console.error('[main] Reindex failed:', (err as Error).message);
+    console.error('[main] Reindex error stack:', (err as Error).stack);
     return { success: false, error: (err as Error).message };
   }
 });

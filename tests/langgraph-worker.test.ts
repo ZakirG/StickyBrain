@@ -91,4 +91,84 @@ test('RAG pipeline with mocked OpenAI and in-memory Chroma using LangGraph', asy
     snippetsCount: result.snippets.length, 
     summaryLength: result.summary.length 
   });
+});
+
+test('RAG pipeline excludes current sticky from results', async () => {
+  // Mock OpenAI
+  const mockOpenAI = {
+    embeddings: {
+      create: vi.fn().mockResolvedValue({
+        data: [{ embedding: [0.1, 0.2, 0.3, 0.4, 0.5] }],
+      }),
+    },
+    chat: {
+      completions: {
+        create: vi.fn().mockResolvedValue({
+          choices: [{ message: { content: 'Mock summary excluding current sticky.' } }],
+        }),
+      },
+    },
+  } as unknown as OpenAI;
+
+  // Create in-memory Chroma client and insert test data
+  const chromaClient = new InMemoryChromaClient();
+  const collection = await chromaClient.getOrCreateCollection({ name: 'stickies_rag_v1' });
+
+  // Insert test embeddings including one from the "current" sticky
+  await collection.upsert({
+    ids: ['current_sticky_1', 'current_sticky_title', 'other_sticky_1', 'other_sticky_2'],
+    embeddings: [
+      [0.1, 0.2, 0.3, 0.4, 0.5], // exact match - from current sticky
+      [0.11, 0.21, 0.31, 0.41, 0.51], // title from current sticky
+      [0.15, 0.25, 0.35, 0.45, 0.55], // from other sticky
+      [0.12, 0.22, 0.32, 0.42, 0.52], // from another sticky
+    ],
+    metadatas: [
+      { stickyTitle: 'Current Sticky', text: 'Content from current sticky', filePath: '/current-sticky.rtfd' },
+      { 
+        stickyTitle: 'Current Sticky', 
+        text: 'Current Sticky (title)', 
+        isTitle: true,
+        preview: 'This is the current sticky being edited',
+        filePath: '/current-sticky.rtfd' 
+      },
+      { stickyTitle: 'Other Sticky 1', text: 'Content from other sticky 1', filePath: '/other-sticky-1.rtfd' },
+      { stickyTitle: 'Other Sticky 2', text: 'Content from other sticky 2', filePath: '/other-sticky-2.rtfd' },
+    ],
+  });
+
+  // Run LangGraph pipeline with currentFilePath set to the current sticky
+  const result = await runRagPipeline('test paragraph', {
+    openai: mockOpenAI,
+    chromaClient,
+    similarityThreshold: 0.1, // Low threshold to include all results
+    currentFilePath: '/current-sticky.rtfd/TXT.rtf', // This should exclude results from /current-sticky.rtfd
+  });
+
+  // Assertions
+  console.log('📊 Test results:', result.snippets.map(s => ({ id: s.id, filePath: s.filePath })));
+  
+  // Should only have results from other stickies, not the current one
+  expect(result.snippets.length).toBe(2); // Only the two "other" stickies
+  
+  // Verify no results from the current sticky
+  const currentStickyResults = result.snippets.filter(s => s.filePath === '/current-sticky.rtfd');
+  expect(currentStickyResults.length).toBe(0);
+  
+  // Verify we have results from other stickies
+  const otherStickyResults = result.snippets.filter(s => s.filePath !== '/current-sticky.rtfd');
+  expect(otherStickyResults.length).toBe(2);
+  
+  // Verify the specific other sticky results are present
+  const otherSticky1 = result.snippets.find(s => s.filePath === '/other-sticky-1.rtfd');
+  const otherSticky2 = result.snippets.find(s => s.filePath === '/other-sticky-2.rtfd');
+  expect(otherSticky1).toBeDefined();
+  expect(otherSticky2).toBeDefined();
+
+  console.log('✅ Current sticky exclusion test passed!');
+  console.log('📊 Results:', { 
+    totalSnippets: result.snippets.length,
+    excludedCurrentSticky: currentStickyResults.length === 0,
+    includedOtherStickies: otherStickyResults.length
+  });
 }); 

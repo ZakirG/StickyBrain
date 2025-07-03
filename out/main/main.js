@@ -189,7 +189,9 @@ async function cleanSnippetText(raw) {
   cleaned = cleaned.replace(/\\[a-zA-Z]+\d*/g, "");
   cleaned = cleaned.replace(/\\/g, "");
   cleaned = cleaned.replace(/[{}]/g, "");
-  cleaned = cleaned.replace(/\s+/g, " ").trim();
+  cleaned = cleaned.replace(/[ \t]+/g, " ");
+  cleaned = cleaned.replace(/\n{3,}/g, "\n\n");
+  cleaned = cleaned.trim();
   console.log("🧹 [MAIN] Cleaned snippet content:", JSON.stringify(cleaned.substring(0, 100)));
   return cleaned;
 }
@@ -275,7 +277,12 @@ electron.app.whenReady().then(() => {
       setBusy(false);
     });
     payload.text;
-    workerProcess.send({ type: "run", paragraph: payload.text });
+    console.log("📁 [MAIN] Current sticky file path:", payload.filePath);
+    workerProcess.send({
+      type: "run",
+      paragraph: payload.text,
+      currentFilePath: payload.filePath
+    });
   });
   electron.app.on("activate", () => {
     if (electron.BrowserWindow.getAllWindows().length === 0) {
@@ -309,16 +316,38 @@ electron.ipcMain.handle("run-embeddings", async () => {
       // Source JS emitted by ts-node in dev
       path.resolve(__dirname, "../../packages/chroma-indexer/src/index.js")
     ];
+    console.log("🔍 [MAIN] Looking for chroma-indexer in candidates:");
+    candidates.forEach((p, idx) => {
+      const exists = fs.existsSync(p);
+      console.log(`  ${idx + 1}. ${p} - exists: ${exists}`);
+    });
     let chromaIndexer = null;
     for (const p of candidates) {
       if (fs.existsSync(p)) {
-        chromaIndexer = await import(`file://${p}`);
-        break;
+        console.log("🔍 [MAIN] Attempting to import:", p);
+        try {
+          delete require.cache[require.resolve(p)];
+          chromaIndexer = require(p);
+          console.log("🔍 [MAIN] CommonJS require succeeded");
+          console.log("🔍 [MAIN] Module keys:", Object.keys(chromaIndexer || {}));
+          break;
+        } catch (requireErr) {
+          console.log("🔍 [MAIN] CommonJS require failed:", requireErr.message);
+          try {
+            chromaIndexer = await import(`file://${p}`);
+            console.log("🔍 [MAIN] ES module import succeeded");
+            console.log("🔍 [MAIN] Module keys:", Object.keys(chromaIndexer || {}));
+            break;
+          } catch (importErr) {
+            console.log("🔍 [MAIN] ES module import failed:", importErr.message);
+          }
+        }
       }
     }
     if (!chromaIndexer) {
       throw new Error("Could not locate chroma-indexer implementation");
     }
+    console.log("🔍 [MAIN] Checking for indexStickies function:", !!chromaIndexer.indexStickies);
     const { indexStickies } = chromaIndexer;
     const chroma = await import("chromadb");
     const ChromaClientCtor = chroma.ChromaClient;
@@ -339,6 +368,7 @@ electron.ipcMain.handle("run-embeddings", async () => {
     return { success: true };
   } catch (err) {
     console.error("[main] Reindex failed:", err.message);
+    console.error("[main] Reindex error stack:", err.stack);
     return { success: false, error: err.message };
   }
 });

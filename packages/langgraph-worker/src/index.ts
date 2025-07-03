@@ -23,6 +23,8 @@ try {
 
 // Async import of chroma-indexer
 async function loadChromaIndexer() {
+  console.log('🔍 [WORKER] Starting loadChromaIndexer...');
+  
   const candidates = [
     // Built JS output (preferred if present)
     path.resolve(__dirname, '../../chroma-indexer/dist/index.js'),
@@ -32,12 +34,29 @@ async function loadChromaIndexer() {
     path.resolve(__dirname, '../../chroma-indexer/src/index.ts'),
   ];
 
+  console.log('🔍 [WORKER] __dirname:', __dirname);
+  console.log('🔍 [WORKER] Candidate paths:');
+  candidates.forEach((p, idx) => {
+    console.log(`  ${idx + 1}. ${p}`);
+  });
+
   for (const p of candidates) {
+    console.log(`🔍 [WORKER] Checking candidate: ${p}`);
+    
     try {
-      if (!require('fs').existsSync(p)) continue;
+      const exists = require('fs').existsSync(p);
+      console.log(`🔍 [WORKER] File exists: ${exists}`);
+      
+      if (!exists) {
+        console.log(`🔍 [WORKER] Skipping ${p} - file does not exist`);
+        continue;
+      }
+
+      console.log(`🔍 [WORKER] Attempting to load: ${p}`);
 
       // Register ts-node on demand so that require() can handle TS files
       if (p.endsWith('.ts')) {
+        console.log('🔍 [WORKER] Registering ts-node for TypeScript file');
         // eslint-disable-next-line @typescript-eslint/no-var-requires
         require('ts-node/register');
       }
@@ -53,10 +72,14 @@ async function loadChromaIndexer() {
        * `require()` cannot resolve. We therefore try a plain `require(p)` first.
        */
       if (typeof require === 'function') {
+        console.log('🔍 [WORKER] Trying CommonJS require()...');
         try {
           // eslint-disable-next-line @typescript-eslint/no-var-requires
           chromaIndexer = require(p);
-        } catch {
+          console.log('🔍 [WORKER] CommonJS require() succeeded');
+          console.log('🔍 [WORKER] Module keys:', Object.keys(chromaIndexer || {}));
+        } catch (err) {
+          console.log('🔍 [WORKER] CommonJS require() failed:', (err as Error).message);
           // noop – will attempt dynamic import next
         }
       }
@@ -69,30 +92,43 @@ async function loadChromaIndexer() {
        * `file://` prefix.
        */
       if (!chromaIndexer) {
+        console.log('🔍 [WORKER] Trying ESM dynamic import...');
         // Use a runtime-evaluated dynamic import to avoid ts-node rewriting it
         // into a CJS require() (which cannot handle file URLs or ESM modules).
         try {
           // Node supports importing either a file URL or absolute path.
           const url = p.startsWith('/') ? `file://${p}` : p;
+          console.log('🔍 [WORKER] Import URL:', url);
           // eslint-disable-next-line no-new-func
           chromaIndexer = await (new Function('u', 'return import(u)'))(url);
-        } catch {
+          console.log('🔍 [WORKER] ESM dynamic import succeeded');
+          console.log('🔍 [WORKER] Module keys:', Object.keys(chromaIndexer || {}));
+        } catch (err) {
+          console.log('🔍 [WORKER] ESM dynamic import failed:', (err as Error).message);
           chromaIndexer = undefined;
         }
       }
 
       if (chromaIndexer) {
+        console.log('🔍 [WORKER] Checking for required exports...');
+        console.log('🔍 [WORKER] InMemoryChromaClient available:', !!chromaIndexer.InMemoryChromaClient);
+        console.log('🔍 [WORKER] indexStickies available:', !!chromaIndexer.indexStickies);
+        
         InMemoryChromaClient = chromaIndexer.InMemoryChromaClient;
         indexStickiesFn = chromaIndexer.indexStickies;
         console.log('[WORKER] Successfully loaded chroma-indexer from', p);
         return;
+      } else {
+        console.log(`🔍 [WORKER] Failed to load module from ${p} - chromaIndexer is undefined`);
       }
     } catch (err) {
       console.warn('[WORKER] Could not load chroma-indexer from', p, ':', (err as Error).message);
+      console.warn('[WORKER] Error stack:', (err as Error).stack);
     }
   }
 
   // If we reached here, loading failed – fall back to stub
+  console.log('🔍 [WORKER] All loading attempts failed, using fallback stub');
   InMemoryChromaClient = class {
     async getOrCreateCollection() {
       return {
@@ -140,6 +176,7 @@ interface PipelineOptions {
 const RagStateAnnotation = Annotation.Root({
   // Input
   paragraphText: Annotation<string>,
+  currentFilePath: Annotation<string>,
   
   // Configuration
   openai: Annotation<OpenAI>,
@@ -319,17 +356,34 @@ async function retrieveNode(state: RagState): Promise<Partial<RagState>> {
 }
 
 /**
- * FilterNode - Filters results by similarity threshold
+ * FilterNode - Filters results by similarity threshold and excludes current sticky
  */
 async function filterNode(state: RagState): Promise<Partial<RagState>> {
-  console.log('🔬 [FILTER NODE] Filtering by similarity threshold...');
+  console.log('🔬 [FILTER NODE] Filtering by similarity threshold and excluding current sticky...');
+  console.log('🚫 [FILTER NODE] Current file path to exclude:', state.currentFilePath);
+  
+  // Extract the parent directory from the current file path 
+  // (e.g., /path/to/sticky.rtfd/TXT.rtf -> /path/to/sticky.rtfd)
+  const currentStickyDir = state.currentFilePath ? 
+    state.currentFilePath.replace(/\/TXT\.rtf$/, '') : '';
+  console.log('🚫 [FILTER NODE] Current sticky directory to exclude:', currentStickyDir);
   
   const filteredSnippets: Snippet[] = [];
   for (let i = 0; i < state.retrievedIds.length; i++) {
     const similarity = state.retrievedDistances.length > 0 ? 1 / (1 + state.retrievedDistances[i]) : 0.5; // Convert distance to similarity (0-1)
     const isTitleVector = state.retrievedMetas[i]?.isTitle === true;
+    const resultFilePath = state.retrievedMetas[i]?.filePath || '';
     
-    console.log(`📌 [FILTER NODE] Result ${i + 1}: similarity=${similarity.toFixed(3)}, threshold=${state.similarityThreshold}, isTitle=${isTitleVector}`);
+    // Check if this result is from the same sticky as the one being edited
+    const isFromCurrentSticky = currentStickyDir && resultFilePath === currentStickyDir;
+    
+    console.log(`📌 [FILTER NODE] Result ${i + 1}: similarity=${similarity.toFixed(3)}, threshold=${state.similarityThreshold}, isTitle=${isTitleVector}, filePath=${resultFilePath}, isFromCurrentSticky=${isFromCurrentSticky}`);
+    
+    // Skip results from the current sticky
+    if (isFromCurrentSticky) {
+      console.log(`🚫 [FILTER NODE] Excluding result ${i + 1} - from current sticky (${resultFilePath})`);
+      continue;
+    }
     
     // Include if passes similarity threshold OR is a title vector
     const passesSimilarity = similarity >= state.similarityThreshold;
@@ -362,7 +416,7 @@ async function filterNode(state: RagState): Promise<Partial<RagState>> {
     }
   }
 
-  console.log('📊 [FILTER NODE] Filtered results:', filteredSnippets.length, 'of', state.retrievedIds.length, 'passed threshold');
+  console.log('📊 [FILTER NODE] Filtered results:', filteredSnippets.length, 'of', state.retrievedIds.length, 'passed threshold and are not from current sticky');
 
   return {
     filteredSnippets,
@@ -475,17 +529,20 @@ export async function runRagPipeline(paragraph: string, options?: {
   openai?: OpenAI;
   chromaClient?: any;
   similarityThreshold?: number;
+  currentFilePath?: string;
 }): Promise<PipelineResult> {
   console.log('🚀 [WORKER] Starting LangGraph RAG pipeline');
   
   const openai = options?.openai || new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const chromaClient = options?.chromaClient || (await getChromaClient({}));
   const similarityThreshold = options?.similarityThreshold ?? 0.3;
+  const currentFilePath = options?.currentFilePath || '';
 
   console.log('🔧 [WORKER] Configuration:');
   console.log('  - OpenAI available:', !!openai);
   console.log('  - ChromaDB client type:', chromaClient.constructor.name);
   console.log('  - Similarity threshold:', similarityThreshold);
+  console.log('  - Current file path:', currentFilePath);
 
   // Create the LangGraph StateGraph
   const workflow = new StateGraph(RagStateAnnotation)
@@ -508,6 +565,7 @@ export async function runRagPipeline(paragraph: string, options?: {
   // Initialize state
   const initialState: RagState = {
     paragraphText: paragraph,
+    currentFilePath,
     openai,
     chromaClient,
     similarityThreshold,
@@ -538,8 +596,11 @@ if (process.argv.includes('--child')) {
   process.on('message', async (msg: any) => {
     if (msg?.type === 'run') {
       console.log('📨 [WORKER] Received run message');
+      console.log('📁 [WORKER] Current file path from message:', msg.currentFilePath);
       try {
-        const result = await runRagPipeline(msg.paragraph);
+        const result = await runRagPipeline(msg.paragraph, {
+          currentFilePath: msg.currentFilePath
+        });
         process.send?.({ type: 'result', result });
       } catch (error) {
         console.error('❌ [WORKER] Error processing paragraph:', error);

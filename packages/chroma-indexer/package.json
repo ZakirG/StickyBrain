@@ -3,10 +3,9 @@
   "version": "1.0.0",
   "description": "StickyBrain Chroma vector database indexer",
   "main": "src/index.ts",
-  "type": "module",
   "private": true,
   "scripts": {
-    "build": "npx tsc",
+    "build": "rm -f tsconfig.tsbuildinfo && npx tsc --build",
     "dev": "tsc --watch",
     "index": "pnpm run build && node dist/index.js",
     "test": "vitest",

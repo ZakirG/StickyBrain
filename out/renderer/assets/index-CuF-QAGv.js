@@ -6966,6 +6966,15 @@ var m = reactDomExports;
   client.createRoot = m.createRoot;
   client.hydrateRoot = m.hydrateRoot;
 }
+function LoadingSpinner({ message = "Loading", className = "" }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `flex items-center gap-2 text-xs text-blue-300 ${className}`, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: message }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lds-ripple text-blue-300", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", {}),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", {})
+    ] })
+  ] });
+}
 function formatBoldText(text) {
   return text.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
 }
@@ -7067,7 +7076,8 @@ function App() {
               summary: partialData.summary || "",
               paragraph: partialData.paragraph || "",
               webSearchPrompt: partialData.webSearchPrompt || "",
-              webSearchResults: partialData.webSearchResults || []
+              webSearchResults: partialData.webSearchResults || [],
+              stickyBrainSynthesis: partialData.stickyBrainSynthesis || ""
             };
             console.log("📈 [RENDERER] Creating new section with partial data");
             return [newSection];
@@ -7171,13 +7181,7 @@ function App() {
       children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "h-6 mb-2 select-none flex items-center gap-3", style: { WebkitAppRegion: "drag" }, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-sm font-semibold", children: "🧠 StickyBrain" }),
-          isLoading && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2 text-xs text-blue-300", style: { WebkitAppRegion: "no-drag" }, children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Loading" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "lds-ripple text-blue-300", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("div", {}),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("div", {})
-            ] })
-          ] })
+          isLoading && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { style: { WebkitAppRegion: "no-drag" }, children: /* @__PURE__ */ jsxRuntimeExports.jsx(LoadingSpinner, { message: "Loading" }) })
         ] }) }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center justify-end gap-2 mb-4", style: { WebkitAppRegion: "no-drag" }, children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -7252,10 +7256,15 @@ function App() {
             ) })
           ] })
         ] }),
+        sections.length > 0 && sections[0].stickyBrainSynthesis && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mb-6", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-sm font-semibold text-green-400 flex items-center gap-2", children: "🧠 StickyBrain Synthesis" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bg-gray-800 border border-green-600/30 rounded p-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-gray-300 leading-relaxed break-words whitespace-pre-line", children: sections[0].stickyBrainSynthesis }) })
+        ] }) }),
         false,
         false,
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-4 h-full overflow-hidden", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 space-y-6 min-w-0 overflow-y-auto", children: [
+            isLoading && sections.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-center text-gray-500 mt-8", children: /* @__PURE__ */ jsxRuntimeExports.jsx(LoadingSpinner, { message: "Processing your stickies", className: "justify-center" }) }),
             sections.map((section, idx) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
               section.summary && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-sm font-semibold text-green-400 mb-2 flex items-center gap-2", children: "⚡ Summary of Related Snippets from Your Old Stickies" }),
@@ -7346,103 +7355,106 @@ function App() {
               /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs mt-2 max-w-xs mx-auto leading-relaxed", children: "Start typing thoughts in a Sticky and I'll grab relevant snippets from other Stickies of yours." })
             ] })
           ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex-1 border-l border-gray-700 pl-4 min-w-0 overflow-y-auto", children: sections.length > 0 && (sections[0].webSearchPrompt || sections[0].webSearchResults) ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
-            sections[0].webSearchResults && sections[0].webSearchResults.some((result) => result.pageSummary) && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { className: "text-sm font-semibold text-green-400 flex items-center gap-2", children: [
-                "🌐 Web Research Summary",
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-xs text-gray-500", children: [
-                  "(",
-                  sections[0].webSearchResults.filter((result) => result.pageSummary).length,
-                  " pages)"
-                ] })
-              ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bg-gray-800 border border-green-600/30 rounded p-3 space-y-4", children: (() => {
-                const summariesWithResults = sections[0].webSearchResults.filter((result) => result.pageSummary);
-                return summariesWithResults.map((result, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-gray-300 leading-relaxed break-words whitespace-pre-line mb-2", children: result.pageSummary }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx(
-                    "a",
-                    {
-                      href: result.url,
-                      target: "_blank",
-                      rel: "noopener noreferrer",
-                      className: "text-xs text-blue-400 hover:text-blue-300 break-all",
-                      children: result.url
-                    }
-                  ),
-                  index < summariesWithResults.length - 1 && /* @__PURE__ */ jsxRuntimeExports.jsx("hr", { className: "border-gray-600 mt-3" })
-                ] }, `summary-${result.url}-${index}`));
-              })() })
-            ] }),
-            sections[0].webSearchPrompt && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-sm font-semibold text-green-400 flex items-center gap-2", children: "🔍 Suggested Web Searches" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-gray-800 border border-purple-600/30 rounded p-3", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-gray-400 mb-2", children: "Based on what you're writing:" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "text-sm text-gray-300 leading-relaxed whitespace-pre-wrap font-sans", children: sections[0].webSearchPrompt })
-              ] })
-            ] }),
-            sections[0].webSearchResults && sections[0].webSearchResults.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-sm font-semibold text-green-400 flex items-center gap-2", children: "🌐 Web Search Results" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", children: sections[0].webSearchResults.map((result, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
-                "div",
-                {
-                  className: "bg-gray-800 border border-green-600/30 rounded p-3 animate-fade-in overflow-hidden",
-                  style: { animationDelay: `${index * 200}ms` },
-                  children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-xs text-gray-400 mb-1 truncate", children: [
-                      "Query: ",
-                      result.query
-                    ] }),
-                    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 border-l border-gray-700 pl-4 min-w-0 overflow-y-auto", children: [
+            isLoading && sections.length === 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-center text-gray-500 mt-8", children: /* @__PURE__ */ jsxRuntimeExports.jsx(LoadingSpinner, { message: "Searching the web", className: "justify-center" }) }),
+            sections.length > 0 && (sections[0].webSearchPrompt || sections[0].webSearchResults) ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
+              sections[0].webSearchResults && sections[0].webSearchResults.some((result) => result.pageSummary) && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { className: "text-sm font-semibold text-green-400 flex items-center gap-2", children: [
+                  "🌐 Web Research Summary",
+                  /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-xs text-gray-500", children: [
+                    "(",
+                    sections[0].webSearchResults.filter((result) => result.pageSummary).length,
+                    " pages)"
+                  ] })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bg-gray-800 border border-green-600/30 rounded p-3 space-y-4", children: (() => {
+                  const summariesWithResults = sections[0].webSearchResults.filter((result) => result.pageSummary);
+                  return summariesWithResults.map((result, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-gray-300 leading-relaxed break-words whitespace-pre-line mb-2", children: result.pageSummary }),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(
                       "a",
                       {
                         href: result.url,
                         target: "_blank",
                         rel: "noopener noreferrer",
-                        className: "block hover:bg-gray-700/50 rounded p-1 -m-1 transition-colors",
-                        children: [
-                          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-xs font-normal text-gray-300 hover:text-gray-200 mb-1 break-words", children: result.title }),
-                          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-xs text-green-400 mt-1 truncate opacity-75", children: new URL(result.url).hostname })
-                        ]
+                        className: "text-xs text-blue-400 hover:text-blue-300 break-all",
+                        children: result.url
                       }
                     ),
-                    /* @__PURE__ */ jsxRuntimeExports.jsx("br", {}),
-                    result.pageSummary && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-3 bg-blue-900/20 border border-blue-600/30 rounded p-2", children: [
-                      /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "text-xs font-medium text-blue-400 mb-2", children: "Page Summary:" }),
-                      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-xs text-gray-300 leading-relaxed whitespace-pre-line", children: result.pageSummary })
-                    ] }),
-                    result.summarizationError && !result.pageSummary && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-3 bg-red-900/20 border border-red-600/30 rounded p-2", children: [
-                      /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "text-xs font-medium text-red-400 mb-2", children: "❌ Summarization Failed:" }),
-                      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-red-300", children: result.summarizationError })
-                    ] }),
-                    result.scrapedContent && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 pt-3 border-t border-gray-600", children: [
+                    index < summariesWithResults.length - 1 && /* @__PURE__ */ jsxRuntimeExports.jsx("hr", { className: "border-gray-600 mt-3" })
+                  ] }, `summary-${result.url}-${index}`));
+                })() })
+              ] }),
+              sections[0].webSearchPrompt && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-sm font-semibold text-green-400 flex items-center gap-2", children: "🔍 Suggested Web Searches" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-gray-800 border border-purple-600/30 rounded p-3", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-gray-400 mb-2", children: "Based on what you're writing:" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "text-sm text-gray-300 leading-relaxed whitespace-pre-wrap font-sans", children: sections[0].webSearchPrompt })
+                ] })
+              ] }),
+              sections[0].webSearchResults && sections[0].webSearchResults.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-sm font-semibold text-green-400 flex items-center gap-2", children: "🌐 Web Search Results" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", children: sections[0].webSearchResults.map((result, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                  "div",
+                  {
+                    className: "bg-gray-800 border border-green-600/30 rounded p-3 animate-fade-in overflow-hidden",
+                    style: { animationDelay: `${index * 200}ms` },
+                    children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-xs text-gray-400 mb-1 truncate", children: [
+                        "Query: ",
+                        result.query
+                      ] }),
                       /* @__PURE__ */ jsxRuntimeExports.jsxs(
-                        "button",
+                        "a",
                         {
-                          onClick: () => toggleScrapedContentExpansion(`${result.query}-${index}`),
-                          className: "text-xs font-medium text-purple-400 hover:text-purple-300 mb-2 flex items-center gap-1",
+                          href: result.url,
+                          target: "_blank",
+                          rel: "noopener noreferrer",
+                          className: "block hover:bg-gray-700/50 rounded p-1 -m-1 transition-colors",
                           children: [
-                            expandedScrapedContent.has(`${result.query}-${index}`) ? "▼" : "▶",
-                            " Scraped Content"
+                            /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-xs font-normal text-gray-300 hover:text-gray-200 mb-1 break-words", children: result.title }),
+                            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-xs text-green-400 mt-1 truncate opacity-75", children: new URL(result.url).hostname })
                           ]
                         }
                       ),
-                      expandedScrapedContent.has(`${result.query}-${index}`) && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bg-gray-900/50 rounded p-2 max-h-64 overflow-y-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "text-xs text-gray-300 whitespace-pre-wrap font-sans leading-relaxed", children: result.scrapedContent }) })
-                    ] }),
-                    result.scrapingError && !result.scrapedContent && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 pt-3 border-t border-gray-600", children: [
-                      /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "text-xs font-medium text-red-400 mb-2", children: "❌ Scraping Failed:" }),
-                      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-red-300 bg-red-900/20 rounded p-2", children: result.scrapingError })
-                    ] })
-                  ]
-                },
-                `${result.query}-${index}`
-              )) })
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("br", {}),
+                      result.pageSummary && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-3 bg-blue-900/20 border border-blue-600/30 rounded p-2", children: [
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "text-xs font-medium text-blue-400 mb-2", children: "Page Summary:" }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-xs text-gray-300 leading-relaxed whitespace-pre-line", children: result.pageSummary })
+                      ] }),
+                      result.summarizationError && !result.pageSummary && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-3 bg-red-900/20 border border-red-600/30 rounded p-2", children: [
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "text-xs font-medium text-red-400 mb-2", children: "❌ Summarization Failed:" }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-red-300", children: result.summarizationError })
+                      ] }),
+                      result.scrapedContent && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 pt-3 border-t border-gray-600", children: [
+                        /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                          "button",
+                          {
+                            onClick: () => toggleScrapedContentExpansion(`${result.query}-${index}`),
+                            className: "text-xs font-medium text-purple-400 hover:text-purple-300 mb-2 flex items-center gap-1",
+                            children: [
+                              expandedScrapedContent.has(`${result.query}-${index}`) ? "▼" : "▶",
+                              " Scraped Content"
+                            ]
+                          }
+                        ),
+                        expandedScrapedContent.has(`${result.query}-${index}`) && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bg-gray-900/50 rounded p-2 max-h-64 overflow-y-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "text-xs text-gray-300 whitespace-pre-wrap font-sans leading-relaxed", children: result.scrapedContent }) })
+                      ] }),
+                      result.scrapingError && !result.scrapedContent && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 pt-3 border-t border-gray-600", children: [
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "text-xs font-medium text-red-400 mb-2", children: "❌ Scraping Failed:" }),
+                        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-red-300 bg-red-900/20 rounded p-2", children: result.scrapingError })
+                      ] })
+                    ]
+                  },
+                  `${result.query}-${index}`
+                )) })
+              ] })
+            ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-center text-gray-500 mt-8", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-2xl mb-2", children: "🔍" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm", children: "Web Search Suggestions" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs mt-2 max-w-xs mx-auto leading-relaxed", children: "Start typing in a Sticky and I'll suggest relevant web searches." })
             ] })
-          ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-center text-gray-500 mt-8", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-2xl mb-2", children: "🔍" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm", children: "Web Search Suggestions" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs mt-2 max-w-xs mx-auto leading-relaxed", children: "Start typing in a Sticky and I'll suggest relevant web searches." })
-          ] }) })
+          ] })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-center" })
       ]

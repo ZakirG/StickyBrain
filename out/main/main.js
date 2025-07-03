@@ -206,7 +206,7 @@ const createFloatingWindow = () => {
     },
     frame: false,
     transparent: false,
-    alwaysOnTop: true,
+    alwaysOnTop: false,
     resizable: false,
     skipTaskbar: true,
     title: "StickyBrain"

@@ -37,6 +37,7 @@ interface SectionData {
   paragraph?: string;
   webSearchPrompt?: string;
   webSearchResults?: WebSearchResult[];
+  stickyBrainSynthesis?: string;
 }
 
 interface WebSearchResult {
@@ -54,6 +55,23 @@ interface WebSearchResult {
 
 interface UserGoals {
   text: string;
+}
+
+/**
+ * Reusable Loading Spinner Component
+ * @param message - Loading message to display
+ * @param className - Additional CSS classes
+ */
+function LoadingSpinner({ message = 'Loading', className = '' }: { message?: string; className?: string }) {
+  return (
+    <div className={`flex items-center gap-2 text-xs text-blue-300 ${className}`}>
+      <span>{message}</span>
+      <div className="lds-ripple text-blue-300">
+        <div></div>
+        <div></div>
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -207,6 +225,7 @@ function App() {
               paragraph: partialData.paragraph || '',
               webSearchPrompt: partialData.webSearchPrompt || '',
               webSearchResults: partialData.webSearchResults || [],
+              stickyBrainSynthesis: partialData.stickyBrainSynthesis || '',
             };
             console.log('📈 [RENDERER] Creating new section with partial data');
             return [newSection];
@@ -335,12 +354,8 @@ function App() {
           <div className="flex items-center gap-2">
             <h1 className="text-sm font-semibold">🧠 StickyBrain</h1>
             {isLoading && (
-              <div className="flex items-center gap-2 text-xs text-blue-300" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
-                <span>Loading</span>
-                <div className="lds-ripple text-blue-300">
-                  <div></div>
-                  <div></div>
-                </div>
+              <div style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+                <LoadingSpinner message="Loading" />
               </div>
             )}
           </div>
@@ -409,6 +424,22 @@ function App() {
             </div>
           )}
         </div>
+
+        {/* StickyBrain Synthesis Section */}
+        {sections.length > 0 && sections[0].stickyBrainSynthesis && (
+          <div className="mb-6">
+            <div className="space-y-3">
+              <h2 className="text-sm font-semibold text-green-400 flex items-center gap-2">
+                🧠 StickyBrain Synthesis
+              </h2>
+              <div className="bg-gray-800 border border-green-600/30 rounded p-3">
+                <p className="text-sm text-gray-300 leading-relaxed break-words whitespace-pre-line">
+                  {sections[0].stickyBrainSynthesis}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Loading Indicator */}
         {false && (
@@ -540,6 +571,12 @@ function App() {
                 <p className="text-xs mt-2 max-w-xs mx-auto leading-relaxed">
                   Start typing thoughts in a Sticky and I'll grab relevant snippets from other Stickies of yours.
                 </p>
+                {/* Loading indicator for left column */}
+                {isLoading && (
+                  <div className="mt-4">
+                    <LoadingSpinner message="Exploring your stickies" className="justify-center" />
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -688,6 +725,12 @@ function App() {
                 <p className="text-xs mt-2 max-w-xs mx-auto leading-relaxed">
                   Start typing in a Sticky and I'll suggest relevant web searches.
                 </p>
+                {/* Loading indicator for right column */}
+                {isLoading && (
+                  <div className="mt-4">
+                    <LoadingSpinner message="Searching the web" className="justify-center" />
+                  </div>
+                )}
               </div>
             )}
           </div>

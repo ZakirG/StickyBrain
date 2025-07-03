@@ -163,6 +163,7 @@ export interface PipelineResult {
   summary: string;
   webSearchPrompt?: string;
   webSearchResults?: WebSearchResult[];
+  stickyBrainSynthesis?: string;
 }
 
 export interface WebSearchResult {
@@ -214,6 +215,7 @@ const RagStateAnnotation = Annotation.Root({
   
   // Final output
   summary: Annotation<string>,
+  stickyBrainSynthesis: Annotation<string>,
   result: Annotation<PipelineResult>,
 });
 
@@ -1044,6 +1046,54 @@ async function webPageSummarizationNode(state: RagState): Promise<Partial<RagSta
 }
 
 /**
+ * StickyBrainSynthesisNode - Generates a focused one-sentence synthesis combining RAG and web research
+ */
+async function stickyBrainSynthesisNode(state: RagState): Promise<Partial<RagState>> {
+  console.log('🧠 [STICKY BRAIN SYNTHESIS NODE] Generating focused synthesis...');
+  
+  // Combine web research summaries into a single string
+  const webResearchSummary = state.webSearchResults
+    ?.filter(result => result.pageSummary)
+    .map(result => result.pageSummary)
+    .join(' ') || '';
+  
+  if (!state.summary && !webResearchSummary) {
+    console.log('⚠️ [STICKY BRAIN SYNTHESIS NODE] No summaries available for synthesis');
+    return { stickyBrainSynthesis: 'No information available for synthesis.' };
+  }
+  
+  console.log('🧠 [STICKY BRAIN SYNTHESIS NODE] Synthesizing from:');
+  console.log('  - RAG summary length:', state.summary.length);
+  console.log('  - Web research summary length:', webResearchSummary.length);
+  
+  try {
+    const synthesis = await generateStickyBrainSynthesis(
+      state.paragraphText,
+      state.summary,
+      webResearchSummary,
+      state.userGoals,
+      state.openai
+    );
+    
+    console.log('✅ [STICKY BRAIN SYNTHESIS NODE] Synthesis generated:', synthesis);
+    
+    // Send incremental update with synthesis
+    sendIncrementalUpdate({
+      stickyBrainSynthesis: synthesis,
+    });
+    
+    return {
+      stickyBrainSynthesis: synthesis,
+    };
+  } catch (error) {
+    console.error('❌ [STICKY BRAIN SYNTHESIS NODE] Failed to generate synthesis:', error);
+    return {
+      stickyBrainSynthesis: 'Failed to generate synthesis.',
+    };
+  }
+}
+
+/**
  * Generate web page summary using OpenAI or fallback
  */
 async function generateWebPageSummary(
@@ -1091,6 +1141,67 @@ async function generateWebPageSummary(
   // Fallback summary
   console.log('🔄 [WORKER] Using fallback web page summary generation');
   return `This page titled "${pageTitle}" contains ${scrapedContent.length} characters of content. The page was automatically selected for summarization based on its relevance to your current work. A detailed summary is not available due to API limitations.`;
+}
+
+/**
+ * Generates a focused one-sentence synthesis using GPT-4o-mini
+ * @param userInput - The user's current input paragraph
+ * @param ragSummary - Summary from related snippets
+ * @param webResearchSummary - Combined web research summaries
+ * @param userGoals - The user's goals
+ * @param openai - OpenAI client instance
+ * @returns A single sentence with the most useful information
+ */
+async function generateStickyBrainSynthesis(
+  userInput: string,
+  ragSummary: string,
+  webResearchSummary: string,
+  userGoals: string,
+  openai?: OpenAI
+): Promise<string> {
+  if (!openai) {
+    return 'OpenAI client not available for synthesis';
+  }
+
+  const prompt = `You are StickyBrain, an AI assistant that extracts critical details from text so that important specific bits of information are extracted and served to the user. You're not writing summaries -- you're extracting the most relevant concrete bit of information that will be relevant to the user.
+  The user is currently brainstorming something -- they're in the middle of typing. Here's what they're currently typing: "${userInput}"
+
+  Your task will be to extract the information from the below sources that will be MOST IMMEDIATELY USEFUL
+  to the user, based on what you have seen they are currently thinking about. We don't want verbose bullshit.
+  We don't want fluff. We don't want vague LLM babble. We just want a tiny bit of EXTREMELY RELEVANT
+  INFORMATION that will benefit the user. For example, if the user typed "I'm hungry but I'm not sure what to eat..." and in their old writings they wrote "grocery list // foods i tend to eat: bananas, 3 apples, grapes, 1 sweet potato, celery, dole fruit cups, milk, frozen food, aim healthy, aim chicken" then you should literally just reply with "In your old writings you mention that you like bananas, apples, grapes, sweet potatoes, celery, and chicken." That is an example of an extremely useful and concise sentence. Prefer the user's old writings over web search results whenever possible. Your reply should be extremely, extremely relevant to what the user has most recently typed, which once again is: "${userInput}"
+  Remember, the user's old writings may be from a very long time ago, so keep that in mind. If the user is currently thinking about an unnamed app for example, and their old writings also mention that they're working on an app, don't assume that these are the same app. Their old writings are old.
+
+  Below are the two sources you will be extracting information from.
+  1) Summary from User's Old Writings:
+  "${ragSummary}"
+
+  2) Summary of Web Research Performed on behalf of the user:
+  "${webResearchSummary}"
+  
+  Now please reply with your one concise sentence that delivers USEFUL CONCRETE INFORMATION.
+  No fluff. No bs. CONCRETE AND RELEVANT INFORMATION. INFORMATION. INFORMATION. Quote directly
+  from the sources if necessary, but don't use quotation marks. INCLUDE USEFUL INFORMATION.
+  `;
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4.1-2025-04-14',
+      messages: [
+        { role: 'system', content: 'You are StickyBrain, an AI that synthesizes information to help users with their current writing.' },
+        { role: 'user', content: prompt }
+      ],
+      temperature: 0.2,
+      max_tokens: 100,
+    });
+
+    const synthesis = response.choices[0]?.message?.content?.trim() || 'Failed to generate synthesis';
+    console.log(`🧠 [generateStickyBrainSynthesis] Generated synthesis: ${synthesis}`);
+    return synthesis;
+  } catch (error) {
+    console.error('❌ [generateStickyBrainSynthesis] Error:', error);
+    return `Failed to generate synthesis: ${error instanceof Error ? error.message : 'Unknown error'}`;
+  }
 }
 
 /**
@@ -1264,6 +1375,7 @@ export async function runRagPipeline(paragraph: string, options?: {
     retrievedDistances: [],
     filteredSnippets: [],
     summary: '',
+    stickyBrainSynthesis: '',
     result: { snippets: [], summary: '' },
     webSearchPrompt: '',
     webSearchResults: [],
@@ -1327,12 +1439,25 @@ export async function runRagPipeline(paragraph: string, options?: {
     console.error('❌ [WORKER] Web search path failed:', error);
   }
 
+  console.log('🔄 [WORKER] Executing StickyBrain synthesis...');
+  
+  // Execute synthesis after both RAG and web search paths are complete
+  try {
+    const synthesisResult = await stickyBrainSynthesisNode(state);
+    state = { ...state, ...synthesisResult };
+    
+    console.log('✅ [WORKER] StickyBrain synthesis completed');
+  } catch (error) {
+    console.error('❌ [WORKER] StickyBrain synthesis failed:', error);
+  }
+
   // Prepare final result
   const result: PipelineResult = {
     snippets: state.filteredSnippets,
     summary: state.summary,
     webSearchPrompt: state.webSearchPrompt,
     webSearchResults: state.webSearchResults,
+    stickyBrainSynthesis: state.stickyBrainSynthesis,
   };
 
   console.log('🎉 [WORKER] LangGraph RAG pipeline completed successfully!');

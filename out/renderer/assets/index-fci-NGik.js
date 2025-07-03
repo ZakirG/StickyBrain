@@ -7009,6 +7009,7 @@ function App() {
   const [statusText, setStatusText] = reactExports.useState("Awaiting input...");
   const [expandedSnippets, setExpandedSnippets] = reactExports.useState(/* @__PURE__ */ new Set());
   const [expandedSnippetContent, setExpandedSnippetContent] = reactExports.useState(/* @__PURE__ */ new Set());
+  const [expandedScrapedContent, setExpandedScrapedContent] = reactExports.useState(/* @__PURE__ */ new Set());
   const [userGoals, setUserGoals] = reactExports.useState("");
   const [isGoalsSaving, setIsGoalsSaving] = reactExports.useState(false);
   const [isGoalsPanelCollapsed, setIsGoalsPanelCollapsed] = reactExports.useState(true);
@@ -7127,6 +7128,7 @@ function App() {
     setStatusText("Cleared");
     setExpandedSnippets(/* @__PURE__ */ new Set());
     setExpandedSnippetContent(/* @__PURE__ */ new Set());
+    setExpandedScrapedContent(/* @__PURE__ */ new Set());
   };
   const toggleSnippetExpansion = (snippetId) => {
     setExpandedSnippets((prev) => {
@@ -7146,6 +7148,17 @@ function App() {
         newSet.delete(snippetId);
       } else {
         newSet.add(snippetId);
+      }
+      return newSet;
+    });
+  };
+  const toggleScrapedContentExpansion = (resultId) => {
+    setExpandedScrapedContent((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(resultId)) {
+        newSet.delete(resultId);
+      } else {
+        newSet.add(resultId);
       }
       return newSet;
     });
@@ -7369,12 +7382,38 @@ function App() {
                         rel: "noopener noreferrer",
                         className: "block hover:bg-gray-700/50 rounded p-1 -m-1 transition-colors",
                         children: [
-                          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-medium text-blue-300 hover:text-blue-200 mb-1 break-words", children: result.title }),
-                          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-gray-300 leading-relaxed break-words", children: result.description }),
+                          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-xs font-normal text-gray-300 hover:text-gray-200 mb-1 break-words", children: result.title }),
                           /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-xs text-green-400 mt-1 truncate opacity-75", children: new URL(result.url).hostname })
                         ]
                       }
-                    )
+                    ),
+                    /* @__PURE__ */ jsxRuntimeExports.jsx("br", {}),
+                    result.pageSummary && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-3 bg-blue-900/20 border border-blue-600/30 rounded p-2", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "text-xs font-medium text-blue-400 mb-2", children: "Page Summary:" }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-xs text-gray-300 leading-relaxed whitespace-pre-line", children: result.pageSummary })
+                    ] }),
+                    result.summarizationError && !result.pageSummary && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mb-3 bg-red-900/20 border border-red-600/30 rounded p-2", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "text-xs font-medium text-red-400 mb-2", children: "❌ Summarization Failed:" }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-red-300", children: result.summarizationError })
+                    ] }),
+                    result.scrapedContent && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 pt-3 border-t border-gray-600", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                        "button",
+                        {
+                          onClick: () => toggleScrapedContentExpansion(`${result.query}-${index}`),
+                          className: "text-xs font-medium text-purple-400 hover:text-purple-300 mb-2 flex items-center gap-1",
+                          children: [
+                            expandedScrapedContent.has(`${result.query}-${index}`) ? "▼" : "▶",
+                            " Scraped Content"
+                          ]
+                        }
+                      ),
+                      expandedScrapedContent.has(`${result.query}-${index}`) && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "bg-gray-900/50 rounded p-2 max-h-64 overflow-y-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "text-xs text-gray-300 whitespace-pre-wrap font-sans leading-relaxed", children: result.scrapedContent }) })
+                    ] }),
+                    result.scrapingError && !result.scrapedContent && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 pt-3 border-t border-gray-600", children: [
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { className: "text-xs font-medium text-red-400 mb-2", children: "❌ Scraping Failed:" }),
+                      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-red-300 bg-red-900/20 rounded p-2", children: result.scrapingError })
+                    ] })
                   ]
                 },
                 `${result.query}-${index}`

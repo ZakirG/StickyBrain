@@ -44,6 +44,12 @@ interface WebSearchResult {
   title: string;
   url: string;
   description: string;
+  scrapedContent?: string;
+  scrapingError?: string;
+  pageSummary?: string;
+  summarizationError?: string;
+  selectedForSummarization?: boolean;
+  selectedForScraping?: boolean;
 }
 
 interface UserGoals {
@@ -124,6 +130,8 @@ function App() {
   const [expandedSnippets, setExpandedSnippets] = useState<Set<string>>(new Set());
   // Track which snippet content is expanded
   const [expandedSnippetContent, setExpandedSnippetContent] = useState<Set<string>>(new Set());
+  // Track which scraped content sections are expanded
+  const [expandedScrapedContent, setExpandedScrapedContent] = useState<Set<string>>(new Set());
   const [userGoals, setUserGoals] = useState<string>('');
   const [isGoalsSaving, setIsGoalsSaving] = useState(false);
   const [isGoalsPanelCollapsed, setIsGoalsPanelCollapsed] = useState(true);
@@ -272,6 +280,7 @@ function App() {
     setStatusText('Cleared');
     setExpandedSnippets(new Set());
     setExpandedSnippetContent(new Set());
+    setExpandedScrapedContent(new Set());
   };
 
   const toggleSnippetExpansion = (snippetId: string) => {
@@ -293,6 +302,18 @@ function App() {
         newSet.delete(snippetId);
       } else {
         newSet.add(snippetId);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleScrapedContentExpansion = (resultId: string) => {
+    setExpandedScrapedContent(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(resultId)) {
+        newSet.delete(resultId);
+      } else {
+        newSet.add(resultId);
       }
       return newSet;
     });
@@ -553,22 +574,71 @@ function App() {
                           style={{ animationDelay: `${index * 200}ms` }}
                         >
                           <div className="text-xs text-gray-400 mb-1 truncate">Query: {result.query}</div>
+
                           <a 
                             href={result.url} 
                             target="_blank" 
                             rel="noopener noreferrer"
                             className="block hover:bg-gray-700/50 rounded p-1 -m-1 transition-colors"
                           >
-                            <h3 className="text-sm font-medium text-blue-300 hover:text-blue-200 mb-1 break-words">
+                            <h3 className="text-xs font-normal text-gray-300 hover:text-gray-200 mb-1 break-words">
                               {result.title}
                             </h3>
-                            <p className="text-xs text-gray-300 leading-relaxed break-words">
-                              {result.description}
-                            </p>
+                            {/* Hide the description */}
                             <div className="text-xs text-green-400 mt-1 truncate opacity-75">
                               {new URL(result.url).hostname}
                             </div>
                           </a>
+                          <br/>
+                          
+                          {/* Show page summary at the top if available */}
+                          {result.pageSummary && (
+                            <div className="mb-3 bg-blue-900/20 border border-blue-600/30 rounded p-2">
+                              <h4 className="text-xs font-medium text-blue-400 mb-2">Page Summary:</h4>
+                              <div className="text-xs text-gray-300 leading-relaxed whitespace-pre-line">
+                                {result.pageSummary}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Show summarization error if summarization failed */}
+                          {result.summarizationError && !result.pageSummary && (
+                            <div className="mb-3 bg-red-900/20 border border-red-600/30 rounded p-2">
+                              <h4 className="text-xs font-medium text-red-400 mb-2">❌ Summarization Failed:</h4>
+                              <p className="text-xs text-red-300">
+                                {result.summarizationError}
+                              </p>
+                            </div>
+                          )}
+                          
+                          {/* Show scraped content if available */}
+                          {result.scrapedContent && (
+                            <div className="mt-3 pt-3 border-t border-gray-600">
+                              <button
+                                onClick={() => toggleScrapedContentExpansion(`${result.query}-${index}`)}
+                                className="text-xs font-medium text-purple-400 hover:text-purple-300 mb-2 flex items-center gap-1"
+                              >
+                                {expandedScrapedContent.has(`${result.query}-${index}`) ? '▼' : '▶'} Scraped Content
+                              </button>
+                              {expandedScrapedContent.has(`${result.query}-${index}`) && (
+                                <div className="bg-gray-900/50 rounded p-2 max-h-64 overflow-y-auto">
+                                  <pre className="text-xs text-gray-300 whitespace-pre-wrap font-sans leading-relaxed">
+                                    {result.scrapedContent}
+                                  </pre>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          
+                          {/* Show scraping error if scraping failed */}
+                          {result.scrapingError && !result.scrapedContent && (
+                            <div className="mt-3 pt-3 border-t border-gray-600">
+                              <h4 className="text-xs font-medium text-red-400 mb-2">❌ Scraping Failed:</h4>
+                              <p className="text-xs text-red-300 bg-red-900/20 rounded p-2">
+                                {result.scrapingError}
+                              </p>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>

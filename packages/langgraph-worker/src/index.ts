@@ -172,6 +172,10 @@ export interface WebSearchResult {
   description: string;
   scrapedContent?: string;
   scrapingError?: string;
+  pageSummary?: string;
+  summarizationError?: string;
+  selectedForSummarization?: boolean;
+  selectedForScraping?: boolean;
 }
 
 interface PipelineOptions {
@@ -732,7 +736,7 @@ async function generateSummary(paragraph: string, snippets: Snippet[], userGoals
       const contextText = snippets.map(s => `- ${s.stickyTitle}: ${s.content}`).join('\n');
 
       
-      const prompt = `You are an assistant in a Mac desktop application. The user is typing in a sticky note. Relevant snippets from their old Sticky notes are being retrieved via RAG and shown to them. You will be summarizing the snippets, starting with the information most valuable to the specific subproblem they are currently solving or the specific subtopic they are currently reflecting on. For example, if the user is trying to brainstorm app ideas, the MOST VALUABLE INFORMATION is SPECIFIC APP IDEAS that they wrote in the retrieved snippets. 
+      const prompt = `You are an assistant in a Mac desktop application. The user is typing in a sticky note. Relevant snippets from their old Sticky notes are being retrieved via RAG and shown to them. You will be summarizing the snippets, starting with the information most valuable to the specific subproblem they are currently solving or the specific subtopic they are currently reflecting on. Omit information that is not related to what the user is currently typing.
 
       In your summary, do not mention any quotes that might contain sensitive information or curse words or embarrassing personal information because this technology will be shown in a tech demo.
       
@@ -827,7 +831,7 @@ Try searching for:
 }
 
 /**
- * WebScrapingNode - Scrapes content from web search result URLs
+ * WebScrapingNode - Scrapes content from selected web search result URLs
  */
 async function webScrapingNode(state: RagState): Promise<Partial<RagState>> {
   console.log('🕷️ [WEB SCRAPING NODE] Starting web page scraping...');
@@ -837,32 +841,39 @@ async function webScrapingNode(state: RagState): Promise<Partial<RagState>> {
     return { webSearchResults: [] };
   }
   
-  console.log(`🌐 [WEB SCRAPING NODE] Scraping ${state.webSearchResults.length} web pages...`);
+  const selectedResults = state.webSearchResults.filter(result => result.selectedForScraping);
+  console.log(`🌐 [WEB SCRAPING NODE] Scraping ${selectedResults.length} selected web pages...`);
   
   const scrapedResults: WebSearchResult[] = [];
   
   for (let i = 0; i < state.webSearchResults.length; i++) {
     const result = state.webSearchResults[i];
-    console.log(`🕷️ [WEB SCRAPING NODE] Scraping ${i + 1}/${state.webSearchResults.length}: ${result.url}`);
     
-    try {
-      const scrapedContent = await scrapeWebPage(result.url);
-      scrapedResults.push({
-        ...result,
-        scrapedContent,
-      });
-      console.log(`✅ [WEB SCRAPING NODE] Successfully scraped ${result.url}, content length: ${scrapedContent.length} chars`);
-    } catch (error) {
-      console.error(`❌ [WEB SCRAPING NODE] Failed to scrape ${result.url}:`, error);
-      scrapedResults.push({
-        ...result,
-        scrapingError: error instanceof Error ? error.message : 'Unknown scraping error',
-      });
-    }
-    
-    // Add small delay between scraping requests to be respectful
-    if (i < state.webSearchResults.length - 1) {
-      await new Promise(resolve => setTimeout(resolve, 500));
+    if (result.selectedForScraping) {
+      console.log(`🕷️ [WEB SCRAPING NODE] Scraping selected page: ${result.url}`);
+      
+      try {
+        const scrapedContent = await scrapeWebPage(result.url);
+        scrapedResults.push({
+          ...result,
+          scrapedContent,
+        });
+        console.log(`✅ [WEB SCRAPING NODE] Successfully scraped ${result.url}, content length: ${scrapedContent.length} chars`);
+      } catch (error) {
+        console.error(`❌ [WEB SCRAPING NODE] Failed to scrape ${result.url}:`, error);
+        scrapedResults.push({
+          ...result,
+          scrapingError: error instanceof Error ? error.message : 'Unknown scraping error',
+        });
+      }
+      
+      // Add small delay between scraping requests to be respectful
+      if (i < selectedResults.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    } else {
+      // Keep non-selected results as-is (without scraping)
+      scrapedResults.push(result);
     }
   }
   
@@ -967,6 +978,264 @@ async function scrapeWebPage(url: string): Promise<string> {
 }
 
 /**
+ * WebPageSummarizationNode - Summarizes each scraped web page individually
+ */
+async function webPageSummarizationNode(state: RagState): Promise<Partial<RagState>> {
+  console.log('📄 [WEB PAGE SUMMARIZATION NODE] Starting individual page summarization...');
+  
+  if (!state.webSearchResults || state.webSearchResults.length === 0) {
+    console.log('⚠️ [WEB PAGE SUMMARIZATION NODE] No web search results to summarize');
+    return { webSearchResults: [] };
+  }
+  
+  const selectedResults = state.webSearchResults.filter(result => 
+    result.scrapedContent && result.selectedForScraping
+  );
+  console.log(`📄 [WEB PAGE SUMMARIZATION NODE] Summarizing ${selectedResults.length} selected pages...`);
+  
+  const summarizedResults: WebSearchResult[] = [];
+  
+  for (let i = 0; i < state.webSearchResults.length; i++) {
+    const result = state.webSearchResults[i];
+    
+    if (result.scrapedContent && result.selectedForScraping) {
+      console.log(`📄 [WEB PAGE SUMMARIZATION NODE] Summarizing selected page: ${result.title}`);
+      
+      try {
+        const summary = await generateWebPageSummary(
+          result.scrapedContent,
+          result.title,
+          result.url,
+          state.paragraphText,
+          state.userGoals,
+          state.openai
+        );
+        
+        summarizedResults.push({
+          ...result,
+          pageSummary: summary,
+        });
+        
+        console.log(`✅ [WEB PAGE SUMMARIZATION NODE] Summary generated for ${result.title}, length: ${summary.length} chars`);
+      } catch (error) {
+        console.error(`❌ [WEB PAGE SUMMARIZATION NODE] Failed to summarize ${result.title}:`, error);
+        summarizedResults.push({
+          ...result,
+          summarizationError: error instanceof Error ? error.message : 'Unknown summarization error',
+        });
+      }
+    } else {
+      // Keep results that weren't selected for summarization as-is
+      summarizedResults.push(result);
+    }
+  }
+  
+  console.log(`🎉 [WEB PAGE SUMMARIZATION NODE] Completed summarization, ${summarizedResults.filter(r => r.pageSummary).length} successful`);
+  
+  // Send incremental update with summarized results
+  sendIncrementalUpdate({
+    webSearchPrompt: state.webSearchPrompt,
+    webSearchResults: summarizedResults,
+  });
+  
+  return {
+    webSearchResults: summarizedResults,
+  };
+}
+
+/**
+ * Generate web page summary using OpenAI or fallback
+ */
+async function generateWebPageSummary(
+  scrapedContent: string, 
+  pageTitle: string, 
+  pageUrl: string,
+  userParagraph: string,
+  userGoals: string, 
+  openai: OpenAI
+): Promise<string> {
+  // Use OpenAI if we have an API key OR if we're in test mode with a mocked instance
+  const shouldUseOpenAI = process.env.OPENAI_API_KEY || process.env.NODE_ENV === 'test';
+  
+  if (shouldUseOpenAI) {
+    try {
+      const prompt = `You are an AI assistant helping a user research information related to what they're currently writing. The user is working on: "${userParagraph}"
+
+The user has these personal goals:
+${userGoals.trim()}
+
+You have been given the full text content from a web page titled "${pageTitle}" (${pageUrl}). Your task is to create a concise 3-sentence summary that:
+
+1. Identifies the most important information relevant to the user's current work and goals
+2. Includes direct quotations from the page to support key points
+3. Focuses on actionable insights or specific details
+
+Requirements:
+- Write exactly 3 sentences, no more, no less
+- Include at least one direct quotation from the page text in quotation marks
+- Focus on information most relevant to what the user is writing about
+- Use plain text format, no markdown or special formatting
+- If the page content is not relevant, briefly explain why in 3 sentences
+
+Here is the full text content from the web page:
+
+${scrapedContent}
+
+Provide your 3-sentence summary:`;
+      
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4.1-2025-04-14',
+        max_tokens: 150,
+        messages: [
+          { role: 'system', content: 'You are a research assistant that creates concise 3-sentence summaries with quotations.' },
+          { role: 'user', content: prompt },
+        ],
+      });
+      
+      return response.choices[0].message.content || 'Summary generation failed.';
+    } catch (error) {
+      console.warn('🔄 [WORKER] OpenAI web page summarization failed, using fallback:', error);
+    }
+  }
+  
+  // Fallback summary
+  console.log('🔄 [WORKER] Using fallback web page summary generation');
+  return `This page titled "${pageTitle}" contains ${scrapedContent.length} characters of content. The page was automatically selected for summarization based on its relevance to your current work. A detailed summary is not available due to API limitations.`;
+}
+
+/**
+ * WebPageSelectionNode - Selects the most valuable pages to scrape and summarize
+ */
+async function webPageSelectionNode(state: RagState): Promise<Partial<RagState>> {
+  console.log('🎯 [WEB PAGE SELECTION NODE] Selecting most valuable pages to scrape...');
+  
+  if (!state.webSearchResults || state.webSearchResults.length === 0) {
+    console.log('⚠️ [WEB PAGE SELECTION NODE] No web search results to select from');
+    return { webSearchResults: [] };
+  }
+  
+  console.log(`🎯 [WEB PAGE SELECTION NODE] Selecting from ${state.webSearchResults.length} search results...`);
+  
+  if (state.webSearchResults.length <= 2) {
+    console.log('🎯 [WEB PAGE SELECTION NODE] 2 or fewer pages available, selecting all');
+    const updatedResults = state.webSearchResults.map(result => ({
+      ...result,
+      selectedForScraping: true,
+    }));
+    return { webSearchResults: updatedResults };
+  }
+  
+  try {
+    const selectedUrls = await selectMostValuablePages(
+      state.webSearchResults,
+      state.paragraphText,
+      state.userGoals,
+      state.openai
+    );
+    
+    // Mark selected pages for scraping
+    const updatedResults = state.webSearchResults.map(result => ({
+      ...result,
+      selectedForScraping: selectedUrls.includes(result.url),
+    }));
+    
+    console.log(`✅ [WEB PAGE SELECTION NODE] Selected ${selectedUrls.length} pages for scraping:`, selectedUrls);
+    
+    return {
+      webSearchResults: updatedResults,
+    };
+  } catch (error) {
+    console.error('❌ [WEB PAGE SELECTION NODE] Failed to select pages:', error);
+    // Fallback: select first 2 pages
+    const updatedResults = state.webSearchResults.map((result, index) => ({
+      ...result,
+      selectedForScraping: index < 2,
+    }));
+    
+    return {
+      webSearchResults: updatedResults,
+    };
+  }
+}
+
+/**
+ * Select most valuable pages for summarization using OpenAI
+ */
+async function selectMostValuablePages(
+  results: WebSearchResult[],
+  userParagraph: string,
+  userGoals: string,
+  openai: OpenAI
+): Promise<string[]> {
+  // Use OpenAI if we have an API key OR if we're in test mode with a mocked instance
+  const shouldUseOpenAI = process.env.OPENAI_API_KEY || process.env.NODE_ENV === 'test';
+  
+  if (shouldUseOpenAI) {
+    try {
+      // Create a list of pages with titles and URLs
+      const pageList = results.map((result, index) => 
+        `${index + 1}. "${result.title}" - ${result.url}`
+      ).join('\n');
+
+      const prompt = `You are helping a user research information for what they're currently writing. The user is working on: "${userParagraph}"
+
+The user has these personal goals:
+${userGoals.trim()}
+
+Below are web search results with page titles and URLs. Your task is to select exactly 2 pages that would be MOST VALUABLE to read and summarize for the user, considering:
+1. What they're currently writing about
+2. Their personal goals
+3. Which pages are likely to contain the most relevant and actionable information
+
+Available pages:
+${pageList}
+
+Instructions:
+- Choose exactly 2 URLs that would be most helpful
+- Focus on pages that are likely to have detailed, actionable content
+- Avoid duplicate or very similar content
+- Prioritize authoritative sources when possible
+
+Respond with only the 2 URLs you selected, one per line, like this:
+https://example1.com
+https://example2.com`;
+      
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4.1-2025-04-14',
+        max_tokens: 200,
+        messages: [
+          { role: 'system', content: 'You are a research assistant that selects the most valuable web pages to read.' },
+          { role: 'user', content: prompt },
+        ],
+      });
+      
+      const responseText = response.choices[0].message.content || '';
+      
+      // Extract URLs from the response
+      const selectedUrls = responseText
+        .split('\n')
+        .map(line => line.trim())
+        .filter(line => line.startsWith('http'))
+        .slice(0, 2); // Ensure we only get 2 URLs
+      
+      console.log('🎯 [PAGE SELECTION] GPT-4.1 selected URLs:', selectedUrls);
+      
+      if (selectedUrls.length === 0) {
+        throw new Error('No valid URLs selected by GPT-4.1');
+      }
+      
+      return selectedUrls;
+    } catch (error) {
+      console.warn('🔄 [PAGE SELECTION] OpenAI page selection failed, using fallback:', error);
+    }
+  }
+  
+  // Fallback: select first 2 pages
+  console.log('🔄 [PAGE SELECTION] Using fallback page selection');
+  return results.slice(0, 2).map(r => r.url);
+}
+
+/**
  * Main RAG pipeline using LangGraph StateGraph
  */
 export async function runRagPipeline(paragraph: string, options?: {
@@ -1051,9 +1320,17 @@ export async function runRagPipeline(paragraph: string, options?: {
     const webSearchExecResult = await webSearchExecutionNode(state);
     state = { ...state, ...webSearchExecResult };
     
-    // Web scraping
+    // Web page selection (choose 2 most valuable pages)
+    const webPageSelectionResult = await webPageSelectionNode(state);
+    state = { ...state, ...webPageSelectionResult };
+    
+    // Web scraping (only for selected pages)
     const webScrapingResult = await webScrapingNode(state);
     state = { ...state, ...webScrapingResult };
+    
+    // Web page summarization (only for selected pages)
+    const webPageSummarizationResult = await webPageSummarizationNode(state);
+    state = { ...state, ...webPageSummarizationResult };
     
     console.log('✅ [WORKER] Web search path completed');
   } catch (error) {

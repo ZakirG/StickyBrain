@@ -170,6 +170,8 @@ export interface WebSearchResult {
   title: string;
   url: string;
   description: string;
+  scrapedContent?: string;
+  scrapingError?: string;
 }
 
 interface PipelineOptions {
@@ -447,6 +449,12 @@ async function summariseNode(state: RagState): Promise<Partial<RagState>> {
   console.log('✅ [SUMMARISE NODE] Summary generated, length:', summary.length, 'characters');
   console.log('📄 [SUMMARISE NODE] Summary preview:', summary.substring(0, 100) + '...');
 
+  // Send incremental update with RAG results
+  sendIncrementalUpdate({
+    snippets: state.filteredSnippets,
+    summary: summary,
+  });
+
   return {
     summary,
   };
@@ -460,6 +468,11 @@ async function webSearchPromptGeneratorNode(state: RagState): Promise<Partial<Ra
   
   const webSearchPrompt = await generateWebSearchPrompt(state.paragraphText, state.userGoals, state.openai);
   console.log('✅ [WEB SEARCH NODE] Web search prompt generated:', webSearchPrompt.substring(0, 100) + '...');
+
+  // Send incremental update with web search suggestions
+  sendIncrementalUpdate({
+    webSearchPrompt: webSearchPrompt,
+  });
 
   return {
     webSearchPrompt,
@@ -507,6 +520,12 @@ async function webSearchExecutionNode(state: RagState): Promise<Partial<RagState
   }
   
   console.log(`🎉 [WEB SEARCH EXECUTION NODE] Completed all searches, total results: ${results.length}`);
+
+  // Send incremental update with web search results (before scraping)
+  sendIncrementalUpdate({
+    webSearchPrompt: state.webSearchPrompt,
+    webSearchResults: results,
+  });
   
   return {
     webSearchResults: results,
@@ -514,28 +533,42 @@ async function webSearchExecutionNode(state: RagState): Promise<Partial<RagState
 }
 
 /**
- * Execute web search using Brave API
+ * Execute web search using Brave API with DuckDuckGo fallback
  */
 async function executeWebSearch(query: string): Promise<WebSearchResult[]> {
+  console.log(`🔍 [WEB SEARCH] Attempting search for: "${query}"`);
+  
+  // Try Brave API first
+  const braveResults = await tryBraveSearch(query);
+  if (braveResults.length > 0) {
+    console.log(`✅ [WEB SEARCH] Brave API successful for "${query}", got ${braveResults.length} results`);
+    return braveResults;
+  }
+  
+  // Fallback to DuckDuckGo
+  console.log(`🦆 [WEB SEARCH] Falling back to DuckDuckGo for "${query}"`);
+  const ddgResults = await tryDuckDuckGoSearch(query);
+  if (ddgResults.length > 0) {
+    console.log(`✅ [WEB SEARCH] DuckDuckGo successful for "${query}", got ${ddgResults.length} results`);
+    return ddgResults;
+  }
+  
+  console.warn(`⚠️ [WEB SEARCH] Both Brave and DuckDuckGo failed for "${query}"`);
+  return [];
+}
+
+/**
+ * Try Brave API search
+ */
+async function tryBraveSearch(query: string): Promise<WebSearchResult[]> {
   const apiKey = process.env.BRAVE_API_KEY;
   
   if (!apiKey) {
-    console.warn('⚠️ [WEB SEARCH] No Brave API key found, skipping search');
+    console.log('⚠️ [BRAVE SEARCH] No Brave API key found, skipping');
     return [];
   }
   
   try {
-    const response = await fetch('https://api.search.brave.com/res/v1/web/search', {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'Accept-Encoding': 'gzip',
-        'X-Subscription-Token': apiKey,
-      },
-      // Add query parameters
-      // Note: We'll construct the URL with query parameters
-    });
-    
     // Construct URL with query parameters
     const url = new URL('https://api.search.brave.com/res/v1/web/search');
     url.searchParams.append('q', query);
@@ -560,7 +593,7 @@ async function executeWebSearch(query: string): Promise<WebSearchResult[]> {
     const data = await searchResponse.json();
     
     if (!data.web || !data.web.results) {
-      console.warn('⚠️ [WEB SEARCH] No web results in response');
+      console.warn('⚠️ [BRAVE SEARCH] No web results in response');
       return [];
     }
     
@@ -572,7 +605,39 @@ async function executeWebSearch(query: string): Promise<WebSearchResult[]> {
     }));
     
   } catch (error) {
-    console.error('❌ [WEB SEARCH] Search failed for query:', query, error);
+    console.error('❌ [BRAVE SEARCH] Search failed for query:', query, error);
+    return [];
+  }
+}
+
+/**
+ * Try DuckDuckGo search using duck-duck-scrape
+ */
+async function tryDuckDuckGoSearch(query: string): Promise<WebSearchResult[]> {
+  try {
+    // Dynamic import to avoid compilation issues
+    const DDG = await import('duck-duck-scrape');
+    
+    const searchResults = await DDG.search(query, {
+      safeSearch: DDG.SafeSearchType.MODERATE,
+      region: 'us-en',
+    });
+    
+    if (!searchResults || searchResults.noResults || !searchResults.results) {
+      console.warn('⚠️ [DUCKDUCKGO SEARCH] No results found');
+      return [];
+    }
+    
+    // Take first 3 results to match Brave API behavior
+    return searchResults.results.slice(0, 3).map((result: any) => ({
+      query,
+      title: result.title || 'No title',
+      url: result.url || '',
+      description: result.description || 'No description',
+    }));
+    
+  } catch (error) {
+    console.error('❌ [DUCKDUCKGO SEARCH] Search failed for query:', query, error);
     return [];
   }
 }
@@ -599,6 +664,32 @@ async function outputNode(state: RagState): Promise<Partial<RagState>> {
   return {
     result,
   };
+}
+
+/**
+ * Send incremental update to main process
+ */
+function sendIncrementalUpdate(partialResult: Partial<PipelineResult>) {
+  console.log('📤 [WORKER] Sending incremental update:', {
+    hasSnippets: !!partialResult.snippets,
+    snippetCount: partialResult.snippets?.length || 0,
+    hasSummary: !!partialResult.summary,
+    summaryLength: partialResult.summary?.length || 0,
+    hasWebSearchPrompt: !!partialResult.webSearchPrompt,
+    webSearchPromptLength: partialResult.webSearchPrompt?.length || 0,
+    hasWebSearchResults: !!partialResult.webSearchResults,
+    webSearchResultsCount: partialResult.webSearchResults?.length || 0,
+  });
+  
+  if (process.send) {
+    process.send({ 
+      type: 'incremental-update', 
+      partialResult 
+    });
+    console.log('✅ [WORKER] Incremental update sent to main process');
+  } else {
+    console.warn('⚠️ [WORKER] process.send is not available, cannot send incremental update');
+  }
 }
 
 /**
@@ -736,6 +827,146 @@ Try searching for:
 }
 
 /**
+ * WebScrapingNode - Scrapes content from web search result URLs
+ */
+async function webScrapingNode(state: RagState): Promise<Partial<RagState>> {
+  console.log('🕷️ [WEB SCRAPING NODE] Starting web page scraping...');
+  
+  if (!state.webSearchResults || state.webSearchResults.length === 0) {
+    console.log('⚠️ [WEB SCRAPING NODE] No web search results to scrape');
+    return { webSearchResults: [] };
+  }
+  
+  console.log(`🌐 [WEB SCRAPING NODE] Scraping ${state.webSearchResults.length} web pages...`);
+  
+  const scrapedResults: WebSearchResult[] = [];
+  
+  for (let i = 0; i < state.webSearchResults.length; i++) {
+    const result = state.webSearchResults[i];
+    console.log(`🕷️ [WEB SCRAPING NODE] Scraping ${i + 1}/${state.webSearchResults.length}: ${result.url}`);
+    
+    try {
+      const scrapedContent = await scrapeWebPage(result.url);
+      scrapedResults.push({
+        ...result,
+        scrapedContent,
+      });
+      console.log(`✅ [WEB SCRAPING NODE] Successfully scraped ${result.url}, content length: ${scrapedContent.length} chars`);
+    } catch (error) {
+      console.error(`❌ [WEB SCRAPING NODE] Failed to scrape ${result.url}:`, error);
+      scrapedResults.push({
+        ...result,
+        scrapingError: error instanceof Error ? error.message : 'Unknown scraping error',
+      });
+    }
+    
+    // Add small delay between scraping requests to be respectful
+    if (i < state.webSearchResults.length - 1) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+  }
+  
+  console.log(`🎉 [WEB SCRAPING NODE] Completed scraping, ${scrapedResults.filter(r => r.scrapedContent).length} successful`);
+  
+  return {
+    webSearchResults: scrapedResults,
+  };
+}
+
+/**
+ * Scrape web page content using axios and cheerio, convert to readable text
+ */
+async function scrapeWebPage(url: string): Promise<string> {
+  try {
+    // Dynamic imports to avoid compilation issues
+    const axios = await import('axios');
+    const cheerio = await import('cheerio');
+    const { convert } = await import('html-to-text');
+    
+    // Fetch the HTML content
+    const response = await axios.default.get(url, {
+      timeout: 10000, // 10 second timeout
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Accept-Encoding': 'gzip, deflate',
+        'Connection': 'keep-alive',
+      },
+      maxRedirects: 5,
+    });
+    
+    if (!response.data) {
+      throw new Error('No content received');
+    }
+    
+    // Load HTML into cheerio
+    const $ = cheerio.load(response.data);
+    
+    // Remove script and style elements
+    $('script, style, nav, header, footer, aside, .ad, .advertisement, .social-share').remove();
+    
+    // Get the main content - try common content selectors
+    let contentHtml = '';
+    const contentSelectors = [
+      'main',
+      'article', 
+      '[role="main"]',
+      '.content',
+      '.main-content',
+      '.post-content',
+      '.entry-content',
+      '#content',
+      '#main',
+      'body'
+    ];
+    
+    for (const selector of contentSelectors) {
+      const element = $(selector);
+      if (element.length > 0) {
+        contentHtml = element.html() || '';
+        break;
+      }
+    }
+    
+    if (!contentHtml) {
+      contentHtml = $('body').html() || '';
+    }
+    
+    // Convert HTML to readable text
+    const textContent = convert(contentHtml, {
+      wordwrap: false,
+      selectors: [
+        { selector: 'h1', options: { uppercase: false } },
+        { selector: 'h2', options: { uppercase: false } },
+        { selector: 'h3', options: { uppercase: false } },
+        { selector: 'a', options: { ignoreHref: true } },
+        { selector: 'img', format: 'skip' },
+      ],
+    });
+    
+    // Clean up the text
+    const cleanedText = textContent
+      .replace(/\n{3,}/g, '\n\n') // Remove excessive newlines
+      .replace(/\t+/g, ' ') // Replace tabs with spaces
+      .replace(/ {2,}/g, ' ') // Replace multiple spaces with single space
+      .trim();
+    
+    // Limit content length to prevent overwhelming the system
+    const maxLength = 3000;
+    if (cleanedText.length > maxLength) {
+      return cleanedText.substring(0, maxLength) + '... [content truncated]';
+    }
+    
+    return cleanedText;
+    
+  } catch (error) {
+    console.error(`❌ [WEB SCRAPING] Failed to scrape ${url}:`, error);
+    throw error;
+  }
+}
+
+/**
  * Main RAG pipeline using LangGraph StateGraph
  */
 export async function runRagPipeline(paragraph: string, options?: {
@@ -769,6 +1000,7 @@ export async function runRagPipeline(paragraph: string, options?: {
     .addNode('summarise', summariseNode)
     .addNode('webSearchGen', webSearchPromptGeneratorNode)
     .addNode('webSearchExec', webSearchExecutionNode)
+    .addNode('webScraping', webScrapingNode)
     .addNode('output', outputNode)
     .addEdge('__start__', 'input')
     .addEdge('input', 'embed')
@@ -777,8 +1009,9 @@ export async function runRagPipeline(paragraph: string, options?: {
     .addEdge('retrieve', 'filter')
     .addEdge('filter', 'summarise')
     .addEdge('summarise', 'output')
-    .addEdge('webSearchGen', 'webSearchExec')  // Both paths converge at output
-    .addEdge('webSearchExec', 'output')  // Both paths converge at output
+    .addEdge('webSearchGen', 'webSearchExec')  // Web search sequence
+    .addEdge('webSearchExec', 'webScraping')   // Scraping after search
+    .addEdge('webScraping', 'output')          // Both paths converge at output
     .addEdge('output', '__end__');
 
   const app = workflow.compile();

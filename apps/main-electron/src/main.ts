@@ -214,6 +214,31 @@ app.whenReady().then(() => {
         }
         mainWindow?.webContents.send('update-ui', msg.result);
         setBusy(false);
+      } else if (msg?.type === 'incremental-update') {
+        console.log('📊 [MAIN] Incremental update received');
+        console.log('📊 [MAIN] Incremental update data:', {
+          hasSnippets: !!msg.partialResult?.snippets,
+          snippetCount: msg.partialResult?.snippets?.length || 0,
+          hasSummary: !!msg.partialResult?.summary,
+          summaryLength: msg.partialResult?.summary?.length || 0,
+          hasWebSearchPrompt: !!msg.partialResult?.webSearchPrompt,
+          webSearchPromptLength: msg.partialResult?.webSearchPrompt?.length || 0,
+          hasWebSearchResults: !!msg.partialResult?.webSearchResults,
+          webSearchResultsCount: msg.partialResult?.webSearchResults?.length || 0,
+        });
+        // Enrich snippets if they exist in the incremental update
+        if (msg.partialResult?.snippets) {
+          msg.partialResult.snippets = await Promise.all(msg.partialResult.snippets.map(async (s: any) => {
+            if (s.filePath) {
+              const noteText = await extractPlainTextFromRtfFile(joinPath(s.filePath, 'TXT.rtf'));
+              return { ...s, noteText: await cleanSnippetText(noteText), content: await cleanSnippetText(s.content || '') };
+            }
+            return { ...s, content: await cleanSnippetText(s.content || '') };
+          }));
+        }
+        console.log('📊 [MAIN] Sending incremental update to renderer');
+        mainWindow?.webContents.send('incremental-update', msg.partialResult);
+        console.log('✅ [MAIN] Incremental update sent to renderer');
       }
     });
 

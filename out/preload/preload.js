@@ -11,5 +11,8 @@ electron.contextBridge.exposeInMainWorld("electronAPI", {
   },
   runEmbeddings: () => electron.ipcRenderer.invoke("run-embeddings"),
   loadUserGoals: () => electron.ipcRenderer.invoke("load-user-goals"),
-  saveUserGoals: (goals) => electron.ipcRenderer.invoke("save-user-goals", goals)
+  saveUserGoals: (goals) => electron.ipcRenderer.invoke("save-user-goals", goals),
+  onIncrementalUpdate: (callback) => {
+    electron.ipcRenderer.on("incremental-update", (_event, data) => callback(data));
+  }
 });

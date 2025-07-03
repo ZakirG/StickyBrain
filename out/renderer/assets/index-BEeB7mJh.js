@@ -7027,6 +7027,55 @@ function App() {
         setStatusText("Results updated!");
         console.log("✅ [RENDERER] UI state updated successfully");
       });
+      window.electronAPI.onIncrementalUpdate?.((partialData) => {
+        console.log("📈 [RENDERER] Received incremental update:", partialData);
+        console.log("📈 [RENDERER] Incremental update details:", {
+          hasSnippets: !!partialData.snippets,
+          snippetCount: partialData.snippets?.length || 0,
+          hasSummary: !!partialData.summary,
+          summaryLength: partialData.summary?.length || 0,
+          hasWebSearchPrompt: !!partialData.webSearchPrompt,
+          webSearchPromptLength: partialData.webSearchPrompt?.length || 0,
+          hasWebSearchResults: !!partialData.webSearchResults,
+          webSearchResultsCount: partialData.webSearchResults?.length || 0
+        });
+        const hasMeaningfulData = partialData.snippets && partialData.snippets.length > 0 || partialData.summary && partialData.summary.length > 0 || partialData.webSearchPrompt && partialData.webSearchPrompt.length > 0 || partialData.webSearchResults && partialData.webSearchResults.length > 0;
+        if (!hasMeaningfulData) {
+          console.log("📈 [RENDERER] No meaningful data in incremental update, skipping");
+          return;
+        }
+        setSections((prevSections) => {
+          console.log("📈 [RENDERER] Previous sections count:", prevSections.length);
+          if (prevSections.length > 0) {
+            const currentSection = prevSections[0];
+            const updatedSection = {
+              // Keep all existing fields
+              snippets: currentSection.snippets || [],
+              summary: currentSection.summary || "",
+              paragraph: currentSection.paragraph || "",
+              webSearchPrompt: currentSection.webSearchPrompt || "",
+              webSearchResults: currentSection.webSearchResults || [],
+              // Override with new data if provided
+              ...partialData
+            };
+            console.log("📈 [RENDERER] Merging with existing section");
+            return [updatedSection, ...prevSections.slice(1)];
+          } else {
+            const newSection = {
+              snippets: partialData.snippets || [],
+              summary: partialData.summary || "",
+              paragraph: partialData.paragraph || "",
+              webSearchPrompt: partialData.webSearchPrompt || "",
+              webSearchResults: partialData.webSearchResults || []
+            };
+            console.log("📈 [RENDERER] Creating new section with partial data");
+            return [newSection];
+          }
+        });
+        const timestamp = (/* @__PURE__ */ new Date()).toLocaleTimeString();
+        setLastUpdated(timestamp);
+        console.log("✅ [RENDERER] Incremental update applied successfully");
+      });
     }
     window.electronAPI?.onRagStart?.(() => {
       console.log("🔄 [RENDERER] RAG pipeline started");
@@ -7042,7 +7091,7 @@ function App() {
   }, []);
   const handleRefresh = async () => {
     console.log("🔄 [RENDERER] Manual refresh button clicked");
-    console.log("�� [RENDERER] Sending refresh request to main process...");
+    console.log("🔌 [RENDERER] Sending refresh request to main process...");
     if (!window.electronAPI) return;
     setIsLoading(true);
     try {
@@ -7192,8 +7241,8 @@ function App() {
         ] }),
         false,
         false,
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-4 h-full", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 space-y-6", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-4 h-full overflow-hidden", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex-1 space-y-6 min-w-0 overflow-y-auto", children: [
             sections.map((section, idx) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
               section.summary && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-gray-800 border border-green-600/30 rounded p-3", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { className: "text-sm font-semibold text-green-400 mb-2 flex items-center gap-2", children: [
@@ -7292,9 +7341,9 @@ function App() {
               /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs mt-2 max-w-xs mx-auto leading-relaxed", children: "Start typing thoughts in a Sticky and I'll grab relevant snippets from other Stickies of yours." })
             ] })
           ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex-1 border-l border-gray-700 pl-4", children: sections.length > 0 && (sections[0].webSearchPrompt || sections[0].webSearchResults) ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex-1 border-l border-gray-700 pl-4 min-w-0 overflow-y-auto", children: sections.length > 0 && (sections[0].webSearchPrompt || sections[0].webSearchResults) ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
             sections[0].webSearchPrompt && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-sm font-semibold text-purple-400 flex items-center gap-2", children: "🔍 Suggested Web Searches" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-sm font-semibold text-green-400 flex items-center gap-2", children: "🔍 Suggested Web Searches" }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "bg-gray-800 border border-purple-600/30 rounded p-3", children: [
                 /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-gray-400 mb-2", children: "Based on what you're writing:" }),
                 /* @__PURE__ */ jsxRuntimeExports.jsx("pre", { className: "text-sm text-gray-300 leading-relaxed whitespace-pre-wrap font-sans", children: sections[0].webSearchPrompt })
@@ -7305,10 +7354,10 @@ function App() {
               /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", children: sections[0].webSearchResults.map((result, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
                 "div",
                 {
-                  className: "bg-gray-800 border border-green-600/30 rounded p-3 animate-fade-in",
+                  className: "bg-gray-800 border border-green-600/30 rounded p-3 animate-fade-in overflow-hidden",
                   style: { animationDelay: `${index * 200}ms` },
                   children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-xs text-gray-400 mb-1", children: [
+                    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-xs text-gray-400 mb-1 truncate", children: [
                       "Query: ",
                       result.query
                     ] }),
@@ -7320,9 +7369,9 @@ function App() {
                         rel: "noopener noreferrer",
                         className: "block hover:bg-gray-700/50 rounded p-1 -m-1 transition-colors",
                         children: [
-                          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-medium text-blue-300 hover:text-blue-200 mb-1", children: result.title }),
-                          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-gray-300 leading-relaxed", children: result.description }),
-                          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-xs text-green-400 mt-1 truncate", children: result.url })
+                          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-medium text-blue-300 hover:text-blue-200 mb-1 break-words", children: result.title }),
+                          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-gray-300 leading-relaxed break-words", children: result.description }),
+                          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-xs text-green-400 mt-1 truncate opacity-75", children: new URL(result.url).hostname })
                         ]
                       }
                     )

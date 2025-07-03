@@ -14,6 +14,7 @@ interface ElectronAPI {
   runEmbeddings: () => Promise<void>;
   loadUserGoals: () => Promise<string>;
   saveUserGoals: (goals: string) => Promise<void>;
+  onIncrementalUpdate: (callback: (data: any) => void) => void;
 }
 
 // Expose protected methods that allow the renderer process to use
@@ -30,6 +31,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   runEmbeddings: () => ipcRenderer.invoke('run-embeddings'),
   loadUserGoals: () => ipcRenderer.invoke('load-user-goals'),
   saveUserGoals: (goals: string) => ipcRenderer.invoke('save-user-goals', goals),
+  onIncrementalUpdate: (callback: (data: any) => void) => {
+    ipcRenderer.on('incremental-update', (_event, data) => callback(data));
+  },
 } as ElectronAPI);
 
 export {}; 

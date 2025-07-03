@@ -17,6 +17,7 @@ declare global {
       runEmbeddings: () => Promise<void>;
       loadUserGoals: () => Promise<string>;
       saveUserGoals: (goals: string) => Promise<void>;
+      onIncrementalUpdate?: (callback: (data: Partial<SectionData>) => void) => void;
     };
   }
 }
@@ -146,6 +147,69 @@ function App() {
         
         console.log('✅ [RENDERER] UI state updated successfully');
       });
+
+      // Listen for incremental updates
+      window.electronAPI.onIncrementalUpdate?.((partialData: Partial<SectionData>) => {
+        console.log('📈 [RENDERER] Received incremental update:', partialData);
+        console.log('📈 [RENDERER] Incremental update details:', {
+          hasSnippets: !!partialData.snippets,
+          snippetCount: partialData.snippets?.length || 0,
+          hasSummary: !!partialData.summary,
+          summaryLength: partialData.summary?.length || 0,
+          hasWebSearchPrompt: !!partialData.webSearchPrompt,
+          webSearchPromptLength: partialData.webSearchPrompt?.length || 0,
+          hasWebSearchResults: !!partialData.webSearchResults,
+          webSearchResultsCount: partialData.webSearchResults?.length || 0,
+        });
+        
+        // Only process incremental updates if we have meaningful data
+        const hasMeaningfulData = 
+          (partialData.snippets && partialData.snippets.length > 0) ||
+          (partialData.summary && partialData.summary.length > 0) ||
+          (partialData.webSearchPrompt && partialData.webSearchPrompt.length > 0) ||
+          (partialData.webSearchResults && partialData.webSearchResults.length > 0);
+        
+        if (!hasMeaningfulData) {
+          console.log('📈 [RENDERER] No meaningful data in incremental update, skipping');
+          return;
+        }
+        
+        setSections(prevSections => {
+          console.log('📈 [RENDERER] Previous sections count:', prevSections.length);
+          // If we have existing sections, merge with the first one
+          if (prevSections.length > 0) {
+            const currentSection = prevSections[0];
+            const updatedSection = {
+              // Keep all existing fields
+              snippets: currentSection.snippets || [],
+              summary: currentSection.summary || '',
+              paragraph: currentSection.paragraph || '',
+              webSearchPrompt: currentSection.webSearchPrompt || '',
+              webSearchResults: currentSection.webSearchResults || [],
+              // Override with new data if provided
+              ...partialData,
+            };
+            console.log('📈 [RENDERER] Merging with existing section');
+            return [updatedSection, ...prevSections.slice(1)];
+          } else {
+            // Create new section with partial data, ensuring all required fields exist
+            const newSection: SectionData = {
+              snippets: partialData.snippets || [],
+              summary: partialData.summary || '',
+              paragraph: partialData.paragraph || '',
+              webSearchPrompt: partialData.webSearchPrompt || '',
+              webSearchResults: partialData.webSearchResults || [],
+            };
+            console.log('📈 [RENDERER] Creating new section with partial data');
+            return [newSection];
+          }
+        });
+        
+        const timestamp = new Date().toLocaleTimeString();
+        setLastUpdated(timestamp);
+        
+        console.log('✅ [RENDERER] Incremental update applied successfully');
+      });
     }
 
     // No opacity toggling – window stays fully opaque regardless of focus.
@@ -167,7 +231,7 @@ function App() {
 
   const handleRefresh = async () => {
     console.log('🔄 [RENDERER] Manual refresh button clicked');
-    console.log('�� [RENDERER] Sending refresh request to main process...');
+    console.log('🔌 [RENDERER] Sending refresh request to main process...');
     
     if (!window.electronAPI) return;
     
@@ -346,9 +410,9 @@ function App() {
         )}
 
         {/* Two Column Layout */}
-        <div className="flex gap-4 h-full">
+        <div className="flex gap-4 h-full overflow-hidden">
           {/* Left Column - Existing Content */}
-          <div className="flex-1 space-y-6">
+          <div className="flex-1 space-y-6 min-w-0 overflow-y-auto">
             {/* Render each result section */}
             {sections.map((section, idx) => (
               <div key={idx} className="space-y-3">
@@ -459,12 +523,12 @@ function App() {
           </div>
 
           {/* Right Column - Web Search Prompts */}
-          <div className="flex-1 border-l border-gray-700 pl-4">
+          <div className="flex-1 border-l border-gray-700 pl-4 min-w-0 overflow-y-auto">
             {sections.length > 0 && (sections[0].webSearchPrompt || sections[0].webSearchResults) ? (
               <div className="space-y-4">
                 {sections[0].webSearchPrompt && (
                   <div className="space-y-3">
-                    <h2 className="text-sm font-semibold text-purple-400 flex items-center gap-2">
+                    <h2 className="text-sm font-semibold text-green-400 flex items-center gap-2">
                       🔍 Suggested Web Searches
                     </h2>
                     <div className="bg-gray-800 border border-purple-600/30 rounded p-3">
@@ -485,24 +549,24 @@ function App() {
                       {sections[0].webSearchResults.map((result, index) => (
                         <div 
                           key={`${result.query}-${index}`}
-                          className="bg-gray-800 border border-green-600/30 rounded p-3 animate-fade-in"
+                          className="bg-gray-800 border border-green-600/30 rounded p-3 animate-fade-in overflow-hidden"
                           style={{ animationDelay: `${index * 200}ms` }}
                         >
-                          <div className="text-xs text-gray-400 mb-1">Query: {result.query}</div>
+                          <div className="text-xs text-gray-400 mb-1 truncate">Query: {result.query}</div>
                           <a 
                             href={result.url} 
                             target="_blank" 
                             rel="noopener noreferrer"
                             className="block hover:bg-gray-700/50 rounded p-1 -m-1 transition-colors"
                           >
-                            <h3 className="text-sm font-medium text-blue-300 hover:text-blue-200 mb-1">
+                            <h3 className="text-sm font-medium text-blue-300 hover:text-blue-200 mb-1 break-words">
                               {result.title}
                             </h3>
-                            <p className="text-xs text-gray-300 leading-relaxed">
+                            <p className="text-xs text-gray-300 leading-relaxed break-words">
                               {result.description}
                             </p>
-                            <div className="text-xs text-green-400 mt-1 truncate">
-                              {result.url}
+                            <div className="text-xs text-green-400 mt-1 truncate opacity-75">
+                              {new URL(result.url).hostname}
                             </div>
                           </a>
                         </div>

@@ -103,12 +103,10 @@ This will:
 ## Run Dev
 
 ```bash
-# Start the development server
-pnpm dev
-
-# Or use electron-forge
-pnpm start
+pnpm dev:full
 ```
+
+This command performs a complete rebuild of all packages and starts the development server. It ensures all TypeScript code changes propagate properly by cleaning build caches and rebuilding everything from scratch.
 
 ## Package
 

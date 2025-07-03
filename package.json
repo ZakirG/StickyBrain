@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "electron-vite dev",
     "dev:prod": "electron-vite dev -- --prod",
+    "dev:full": "cd packages/chroma-indexer && rm -rf dist && pnpm run build && cd ../.. && pnpm run build && pnpm dev:prod",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "preview:prod": "electron-vite preview -- --prod",
